@@ -1,6 +1,6 @@
 /*
 StepperClass - let you control Polulu stepper motors drivers 
-like A4988 and RDRV8825.
+like A4988 and DRV8825.
 
 Simple usage:
  - Just create using default constructor and call Init();
@@ -51,7 +51,7 @@ St.Peterburg, Russia
 class StepperClass
 {
   private:
-    int fStepPin, fDirPin, fEnablePin, fMS1Pin, fMS2Pin, fMS3Pin;
+    int fStepPin, fDirPin, fEnablePin, fMS1Pin, fMS2Pin, fMS3Pin, fSleepPin;
     unsigned long fLastStep;
     int fType;
 
@@ -68,7 +68,7 @@ class StepperClass
     int fMicroSteps[10]; 
     boolean fEnabled, fRangeCheck;
 
-    StepperClass(byte step, byte dir, byte enable, byte ms1, byte ms2, byte ms3, int step_rev, int type);
+    StepperClass(byte step, byte dir, byte enable, byte ms1, byte ms2, byte ms3, /*byte sleep,*/ int step_rev, int type);
     // step, dir - step and dir pins
     // ms1, ms2, ms3 - microstepping pins
     // step_rev - step by revolution

@@ -1,13 +1,28 @@
 #include "Arduino.h"
 #include "StepperClass.h"
 
-StepperClass::StepperClass(byte step, byte dir, byte enable, byte ms1, byte ms2, byte ms3, int step_rev, int type)
+StepperClass::StepperClass(byte step, byte dir, byte enable, byte ms1, byte ms2, byte ms3, /*byte sleep, */int step_rev, int type)
 {
    fStepPin = step;
    fDirPin = dir;
    fEnablePin = enable;
    fEnabled = false;
    fMS1Pin = ms1; fMS2Pin = ms2; fMS3Pin = ms3;   
+//   fSleepPin = sleep;
+
+   digitalWrite(fEnablePin, HIGH);      
+//   digitalWrite(fSleepPin, HIGH);
+   digitalWrite(fStepPin, HIGH);
+
+   pinMode(fDirPin, OUTPUT);
+   pinMode(fStepPin, OUTPUT);
+   pinMode(fMS1Pin, OUTPUT);
+   pinMode(fMS2Pin, OUTPUT);  
+   pinMode(fMS3Pin, OUTPUT);
+//   pinMode(fSleepPin, OUTPUT);
+   pinMode(fEnablePin, OUTPUT);
+
+
    fStepsPerRevolutionDefault = step_rev;
    fStepsPerRevolution = fStepsPerRevolutionDefault;
 
@@ -39,15 +54,10 @@ StepperClass::StepperClass(byte step, byte dir, byte enable, byte ms1, byte ms2,
 
 void StepperClass::Init()
 {   
-    pinMode(fDirPin, OUTPUT);
-    pinMode(fStepPin, OUTPUT);
-    pinMode(fMS1Pin, OUTPUT);
-    pinMode(fMS2Pin, OUTPUT);  
-    pinMode(fMS3Pin, OUTPUT);
-    pinMode(fEnablePin, OUTPUT);
+
 
     fEnabled = false;
-    digitalWrite(fEnablePin, HIGH);      
+    
 }
 
 void StepperClass::EnablePower(boolean enable)

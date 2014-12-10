@@ -33,9 +33,9 @@
 #define MS1 12
 #define MS2 11
 #define MS3 10
-#define A4988_ENABLES 13
+#define A4988_ENABLES 3
 
-const char SketchVersion[] = "1.0";
+const char SketchVersion[] = "1.1";
 
 //  Communication protocol
 // 168 - first byte, #13#10 - end of the command
@@ -118,6 +118,13 @@ int BufLength = 0;
 
 
 void setup() {
+
+    FocuserStepper.Init();   
+    FocuserStepper.SetMicroStep(MICROSTEP16);
+    FocuserStepper.fSpeed = 500;
+    FocuserStepper.fMinSpeed = MINSPEED;
+    FocuserStepper.fMaxSpeed = MAXSPEED;
+    
     pinMode(buttonPinLeft, INPUT);
     pinMode(buttonPinRight, INPUT);
     pinMode(buttonPinRelease, INPUT);
@@ -136,12 +143,7 @@ void setup() {
     Serial.begin(9600);
     Serial.println("Started!");
 //    Serial.println(steptime_microsec);
-
-    FocuserStepper.Init();   
-    FocuserStepper.SetMicroStep(MICROSTEP16);
-    FocuserStepper.fSpeed = 500;
-    FocuserStepper.fMinSpeed = MINSPEED;
-    FocuserStepper.fMaxSpeed = MAXSPEED;
+    
     GetMotorSpeed();
     
     LastAction = millis();
@@ -437,7 +439,8 @@ void loop() {
         IsRollingToNewPos=LOW;
         SendCmd(FOCUSER_GO_TO_POSITION, "0");
     }    
-    
+   LastAction = millis();              
+           
     if (IsDebug)
        SendCmd(FOCUSER_CMD_DEBUG, "distance:" + String(FocuserStepper.fRelativePosition));                                  
   } else {
@@ -457,13 +460,13 @@ void loop() {
   
   if (FocuserStepper.fEnabled){
     int buttonPinState = digitalRead(buttonPinRelease);      
-    int time_diff = LastAction - millis();
-    if ((abs(time_diff)>ReleaseTime)||(buttonPinState==HIGH)){    
+    int time_diff = millis() - LastAction;
+    if ((time_diff>ReleaseTime)||(buttonPinState==HIGH)){    
        FocuserStepper.EnablePower(false);      
        SendCmd(FOCUSER_RELEASE);      
     }       
   }
-  
+ 
 
   int time_diff = millis() - LastPosCheck;
   if (time_diff>200){
