@@ -115,7 +115,6 @@ int CheckSpeedTime = 100;  //
 
 // Some flags
 int IsDebug = 0;
-int IsRangeCheck = 0;
 int IsRelease = true;
 
 
@@ -345,7 +344,7 @@ void serialEvent(){
              break;        
               
         case FOCUSER_RANGE_CHECK:
-               IsRangeCheck = SerialBuf[2];
+               FocuserStepper.fRangeCheck = SerialBuf[2];
                SendCmd(FOCUSER_RANGE_CHECK, SerialBuf[2]);
              break;
         case FOCUSER_SET_SPEED:{
