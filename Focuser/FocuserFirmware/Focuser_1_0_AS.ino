@@ -27,7 +27,7 @@
 //#include <Stepper.h>
 #include <StepperClass.h>
 
-const char SketchVersion[] = "1.1";
+const char SketchVersion[] = "1.2";
 
 // A4988 connection pins
 #define DirectionPin 9                      //Direction Pin - Initial State is ZERO
@@ -102,9 +102,12 @@ StepperClass FocuserStepper(StepPin, DirectionPin, A4988_ENABLES, MS1, MS2, MS3,
 long OldMotorSpeedDU = -100;
 long old_position = 0;
 
-const int ROLLING_LEFT = -1;
+
+enum MOTOR_STATE {ROLLING_LEFT = -1, HOLD = 0, ROLLING_RIGHT = 1};
+
+/*const int ROLLING_LEFT = -1;
 const int ROLLING_RIGHT = 1;
-const int HOLD = 0;
+const int HOLD = 0;*/
 volatile int IsRolling = HOLD;  // Rolling status
 volatile int IsRollingToNewPos = 0;  // Rolling to the new position status
 
