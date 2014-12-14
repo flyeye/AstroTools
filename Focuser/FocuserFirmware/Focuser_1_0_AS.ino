@@ -27,19 +27,24 @@
 //#include <Stepper.h>
 #include <StepperClass.h>
 
+const char SketchVersion[] = "1.1";
+
+// A4988 connection pins
 #define DirectionPin 9                      //Direction Pin - Initial State is ZERO
 #define StepPin 8                           //Step Pin - Pulse this to step the motor in the direction selected by the Direction Pin
-
 #define MS1 12
 #define MS2 11
 #define MS3 10
 #define A4988_ENABLES 3
 
-const char SketchVersion[] = "1.1";
+// speed limitations as a delay between steps and steps by revolution
+#define MIN_SPEED_DELAY 100000
+#define MAX_SPEED_DELAY 250
+#define DEFAULT_MS MICROSTEP16
+#define STEP_PER_REVOLUTION 200
 
 //  Communication protocol
 // 168 - first byte, #13#10 - end of the command
-
 const int FOCUSER_STOP = 210;
 const int FOCUSER_STEP_RIGHT = 211;
 const int FOCUSER_ROLL_RIGHT = 212;
@@ -54,8 +59,8 @@ const int FOCUSER_GET_SPEED = 240;
 const int FOCUSER_SET_SPEED = 241;  
 const int FOCUSER_RELEASE = 220; 
 const int FOCUSER_CMD_START = 168;
-const int FOCUSER_GET_MAX_SPEED = 239;
-const int FOCUSER_GET_MIN_SPEED = 238;
+const int FOCUSER_GET_MIN_SPEED_DELAY = 239;
+const int FOCUSER_GET_MAX_SPEED_DELAY = 238;
 const int FOCUSER_SET_MICROSTEP = 231;
 const int FOCUSER_GET_MICROSTEP = 230;
 const int FOCUSER_GET_POSITION = 225;
@@ -68,24 +73,21 @@ const int FOCUSER_CMD_STOP_2 = 10;
 const int FOCUSER_CMD_DEBUG = 251;
 const int FOCUSER_DEBUG = 250;
 
+int SerialBuf[255];
+int BufLength = 0;
 
-//  Arduino 
+//  Remote controls pins
 const int buttonPinLeft = 2;     // 
 const int buttonPinRight = 4;     // 
 const int buttonPinRelease = 7;
 const int speedled = 6;           // speed led
-const int motorled = 5;           // motor led
+const int motorled = 5;           // motor motion led
 
 int buttonStateLeft = 0;         // variable for reading the pushbutton status
 int buttonOldStateLeft = LOW;
 int buttonStateRight = 0;         // variable for reading the pushbutton status
 int buttonOldStateRight = LOW;
 
-// for your motor
-long MAXSPEED = 100000;
-long MINSPEED = 250;
-
-unsigned long LastAction=0, LastPosCheck = 0, LastSpeedCheck = 0;
 
 // initialize the stepper library on pins 8 through 11, SeeedStudio MotorShield:
 //Stepper myStepper(stepsPerRevolution, 8,11,12,13);            
@@ -93,61 +95,55 @@ unsigned long LastAction=0, LastPosCheck = 0, LastSpeedCheck = 0;
 //initialize the stepper library AccelStepper on pins 8 (STEP) and 9 (DIR) , A4988:
 //AccelStepper myStepper(AccelStepper::DRIVER, StepPin, DirectionPin); // Defaults to AccelStepper::FULL4WIRE (4 pins) on 2, 3, 4, 5
 
-StepperClass FocuserStepper(StepPin, DirectionPin, A4988_ENABLES, MS1, MS2, MS3, 200, A4988);
+
+//  motor`s variable and some parameters
+StepperClass FocuserStepper(StepPin, DirectionPin, A4988_ENABLES, MS1, MS2, MS3, STEP_PER_REVOLUTION, A4988);
 
 long OldMotorSpeedDU = -100;
 long old_position = 0;
 
-int ReleaseTime = 10000;
-int CheckSpeedTime = 100;
-
 const int ROLLING_LEFT = -1;
 const int ROLLING_RIGHT = 1;
 const int HOLD = 0;
-int IsRolling = HOLD;
+int IsRolling = HOLD;  // Rolling status
+int IsRollingToNewPos = 0;  // Rolling to the new position status
 
-int IsRollingToNewPos = 0;
+unsigned long LastAction=0, LastPosCheck = 0, LastSpeedCheck = 0;
 
+int ReleaseTime = 2;   //  Idle time to release motor, in seconds
+int CheckSpeedTime = 100;  //  
+
+// Some flags
 int IsDebug = 0;
-
 int IsRangeCheck = 0;
-int SerialBuf[255];
-int BufLength = 0;
+int IsRelease = true;
 
-// -------------------------------------
+
+// --------------- Initialization ------------------------------------
 
 
 void setup() {
 
-    FocuserStepper.Init();   
-    FocuserStepper.SetMicroStep(MICROSTEP16);
-    FocuserStepper.fSpeed = 500;
-    FocuserStepper.fMinSpeed = MINSPEED;
-    FocuserStepper.fMaxSpeed = MAXSPEED;
-    
+    FocuserStepper.Init(MIN_SPEED_DELAY, MAX_SPEED_DELAY);   
+    FocuserStepper.SetMicroStep(DEFAULT_MS);
+    FocuserStepper.SetSpeed(500);
+
     pinMode(buttonPinLeft, INPUT);
     pinMode(buttonPinRight, INPUT);
     pinMode(buttonPinRelease, INPUT);
     pinMode(speedled, OUTPUT);
     pinMode(motorled, OUTPUT);
 
-//    pinMode(DirectionPin, OUTPUT);
-//    pinMode(StepPin, OUTPUT);
-//  A4988 microstepping
-//    pinMode(MS1, OUTPUT);
-//    pinMode(MS2, OUTPUT);  
-//   pinMode(MS3, OUTPUT);   
-//  A4988 Enable outputs
-//    pinMode(A4988_ENABLES, OUTPUT);
     
     Serial.begin(9600);
     Serial.println("Started!");
-//    Serial.println(steptime_microsec);
     
-    GetMotorSpeed();
+    GetMotorSpeed();  
     
     LastAction = millis();
 }
+
+// ----------------   Communications with PC --------------------------------
 
 void SendCmd(int cmd)
 {
@@ -170,50 +166,6 @@ void SendCmd(int cmd, String str)
        Serial.write(cmd);
        Serial.println(str);
 }
-
-boolean UpdatePosition(){
-  
-   if (old_position != FocuserStepper.fPosition){
-      old_position = FocuserStepper.fPosition;
-      SendCmd(FOCUSER_GET_POSITION, String(FocuserStepper.fPosition));
-      return true;
-   } 
-  
-   return false; 
-
-}
-
-void GetMotorSpeed()
-{
-// read the sensor value:
-  int sensorReading = analogRead(A0);
-  int new_motorSpeed = sensorReading; //map(sensorReading, 0, 1023, 1, 200);
-  int speed_diff = new_motorSpeed-OldMotorSpeedDU;
-  if ( abs(speed_diff)>4){ 
-      if (IsDebug)
-        SendCmd(FOCUSER_CMD_DEBUG, "change motor speed: " + String(OldMotorSpeedDU) + " -> " + String(new_motorSpeed));
-      OldMotorSpeedDU = new_motorSpeed;      
-      SetSpeed(map(new_motorSpeed, 0, 1023, MINSPEED, MAXSPEED));
-  }
-}
-
-void SetSpeed(long new_motorSpeed)
-{ 
-  if (FocuserStepper.fSpeed != new_motorSpeed){              
-    FocuserStepper.fSpeed = new_motorSpeed;
-    int led_brightness = 0;
-    led_brightness = map(new_motorSpeed, MINSPEED, MAXSPEED, 5, 255);
-    analogWrite(speedled, led_brightness);    
-    SendCmd(FOCUSER_GET_SPEED, String(FocuserStepper.fSpeed));
-   }  
-}
-
-void Roll(int dir){     
-      analogWrite(motorled, HIGH);       
-      FocuserStepper.Roll(dir);      
-      analogWrite(motorled, LOW);        
-}
-
 
 int FindCmdStart(int *buff, int length)
 {
@@ -342,15 +294,15 @@ void serialEvent(){
             break;  
             
           case FOCUSER_GET_SPEED:
-             SendCmd(FOCUSER_GET_SPEED, String(FocuserStepper.fSpeed));         
+             SendCmd(FOCUSER_GET_SPEED, String(FocuserStepper.GetSpeed()));         
             break;
             
-          case FOCUSER_GET_MAX_SPEED:
-             SendCmd(FOCUSER_GET_MAX_SPEED, String(MAXSPEED));
+          case FOCUSER_GET_MIN_SPEED_DELAY:
+             SendCmd(FOCUSER_GET_MIN_SPEED_DELAY, String(MIN_SPEED_DELAY));
             break; 
            
-          case FOCUSER_GET_MIN_SPEED:
-             SendCmd(FOCUSER_GET_MIN_SPEED, String(MINSPEED));
+          case FOCUSER_GET_MAX_SPEED_DELAY:
+             SendCmd(FOCUSER_GET_MAX_SPEED_DELAY, String(MAX_SPEED_DELAY));
             break; 
            
           case FOCUSER_SET_MICROSTEP:
@@ -398,8 +350,6 @@ void serialEvent(){
              break;
         case FOCUSER_SET_SPEED:{
                long new_speed = param.toInt();
-               if (new_speed>MAXSPEED)
-                  new_speed=MAXSPEED;
                SetSpeed(new_speed);
             break;              
         }   
@@ -414,16 +364,59 @@ void serialEvent(){
   } 
 }
 
+// ----------------------------------     Some extra fucntion ------------------------------
 
-void loop() {     
-  
+void GetMotorSpeed()   // Read potentiometer
+{
+// read the sensor value:
+  int sensorReading = analogRead(A0);
+  int new_motorSpeed = sensorReading; //map(sensorReading, 0, 1023, 1, 200);
+  int speed_diff = new_motorSpeed-OldMotorSpeedDU;
+  if ( abs(speed_diff)>4){ 
+      if (IsDebug)
+        SendCmd(FOCUSER_CMD_DEBUG, "change motor speed: " + String(OldMotorSpeedDU) + " -> " + String(new_motorSpeed));
+      OldMotorSpeedDU = new_motorSpeed;      
+      SetSpeed(map(new_motorSpeed, 0, 1023, MAX_SPEED_DELAY, MIN_SPEED_DELAY));
+  }
+}
 
-  if (millis() - LastSpeedCheck > CheckSpeedTime){   
+void SetSpeed(long new_motorSpeed)    // Apply new spped value 
+{ 
+  if (FocuserStepper.GetSpeed() != new_motorSpeed){              
+    FocuserStepper.SetSpeed(new_motorSpeed);
+    int led_brightness = 0;
+    led_brightness = 201 - map(FocuserStepper.GetSpeed(), MAX_SPEED_DELAY, MIN_SPEED_DELAY, 0, 200);
+    analogWrite(speedled, led_brightness);    
+    SendCmd(FOCUSER_GET_SPEED, String(FocuserStepper.GetSpeed()));
+   }  
+}
+
+boolean UpdatePosition(){   // Send new positio to PC if it has been changed
+   if (old_position != FocuserStepper.fPosition){
+      old_position = FocuserStepper.fPosition;
+      SendCmd(FOCUSER_GET_POSITION, String(FocuserStepper.fPosition));
+      return true;
+   }   
+   return false; 
+}
+
+void Roll(int dir){    // Blinking with LED during while rolling
+      analogWrite(motorled, 100);       
+      FocuserStepper.Roll(dir);      
+      analogWrite(motorled, 0);        
+}
+
+
+//   -----------------------------     Main loop   -------------------------
+
+void loop() {      
+
+  if (millis() - LastSpeedCheck > CheckSpeedTime){   // Potentiometer check
      GetMotorSpeed();
      LastSpeedCheck = millis();
   }
           
-  if (IsRollingToNewPos==HIGH){
+  if (IsRollingToNewPos==HIGH){   // if Rolling to a new specified form PC position 
     
     FocuserStepper.fRelativePosition = FocuserStepper.fTargetPosition-FocuserStepper.fPosition;    
     if (abs(FocuserStepper.fRelativePosition)>=FocuserStepper.fMicroSteps[FocuserStepper.fMicroStep]){
@@ -445,9 +438,9 @@ void loop() {
        SendCmd(FOCUSER_CMD_DEBUG, "distance:" + String(FocuserStepper.fRelativePosition));                                  
   } else {
 
-    buttonStateLeft = digitalRead(buttonPinLeft);  
+    buttonStateLeft = digitalRead(buttonPinLeft);    // read buttons
     buttonStateRight = digitalRead(buttonPinRight);
-    if ((buttonStateLeft==HIGH)||(IsRolling==ROLLING_LEFT)){
+    if ((buttonStateLeft==HIGH)||(IsRolling==ROLLING_LEFT)){  // and roll if pressed
        Roll(STEP_FORWARD);
        LastAction = millis();              
     } else if ((buttonStateRight==HIGH)||(IsRolling==ROLLING_RIGHT)) {  
@@ -458,17 +451,16 @@ void loop() {
     buttonOldStateLeft = buttonStateLeft;
   }    
   
-  if (FocuserStepper.fEnabled){
+  if (FocuserStepper.fEnabled){   // if out of use for the ReleaseTime - realse motor
     int buttonPinState = digitalRead(buttonPinRelease);      
-    int time_diff = millis() - LastAction;
-    if ((time_diff>ReleaseTime)||(buttonPinState==HIGH)){    
+    int time_diff = (millis() - LastAction)/1000;
+    if ((buttonPinState==HIGH)||((time_diff>ReleaseTime)&&(IsRelease))){    
        FocuserStepper.EnablePower(false);      
        SendCmd(FOCUSER_RELEASE);      
     }       
   }
  
-
-  int time_diff = millis() - LastPosCheck;
+  int time_diff = millis() - LastPosCheck;  // if necassery - check position and send it to PC
   if (time_diff>200){
       UpdatePosition();
       LastPosCheck = millis();

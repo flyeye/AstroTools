@@ -16,7 +16,7 @@ StepperClass::StepperClass(byte step, byte dir, byte enable, byte ms1, byte ms2,
 
    fPosition = 0; fMaxPosition = 0; fMinPosition = 0;
    fTargetPosition = 0; fRelativePosition = 0;
-   fSpeed = 0; fMaxSpeed = 0; fMinSpeed = 0;
+   fSpeed = 0; fMaxSpeedDelay = 0; fMinSpeedDelay = 0;
    fMicroStep = 0;  
 
    fType = type;
@@ -40,7 +40,7 @@ StepperClass::StepperClass(byte step, byte dir, byte enable, byte ms1, byte ms2,
    fLastStep = 0;
 }
 
-void StepperClass::Init()
+void StepperClass::Init(long minspeedd, long maxspeedd)
 {   
 
    fEnabled = false;
@@ -56,8 +56,11 @@ void StepperClass::Init()
    digitalWrite(fEnablePin, HIGH);      
 //   digitalWrite(fSleepPin, HIGH);
    digitalWrite(fStepPin, HIGH);
+
+   fMaxSpeedDelay = maxspeedd; fMinSpeedDelay = minspeedd;
     
 }
+
 
 void StepperClass::EnablePower(boolean enable)
 {
@@ -159,4 +162,21 @@ void StepperClass::SetMicroStep(int new_micro_step)
       }
       fStepsPerRevolution = fMicroSteps[fMicroStep]*fStepsPerRevolutionDefault;  // change this to fit the number of steps per revolution    
     }
+}
+
+long StepperClass::SetSpeed(long speed)
+{
+     if (speed>fMinSpeedDelay)
+          fSpeed = fMinSpeedDelay;
+     else if (speed<fMaxSpeedDelay)
+          fSpeed = fMaxSpeedDelay;                  
+     else fSpeed = speed;
+
+     return fSpeed;
+}
+
+
+long StepperClass::GetSpeed()
+{
+     return fSpeed;
 }

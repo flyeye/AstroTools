@@ -15,7 +15,6 @@ To roll with certain speed you need to call Roll() function more frequently
 then fSpeed.
 
 You can also you position limitation by corresponding fields. 
-Speed limitation is not implemented yet. 
 fTargetPosition and fRelativePosition is useful, but this code 
 is also implemented outside.
 
@@ -56,11 +55,10 @@ class StepperClass
     int fType;
 
     int fStepTime_microsec;
+    long fSpeed, fMinSpeedDelay, fMaxSpeedDelay; 
 
   public:
     long fPosition, fMaxPosition, fMinPosition, fTargetPosition, fRelativePosition;  
-
-    long fSpeed, fMinSpeed, fMaxSpeed; // In this version its not a speed, its a timeframe between steps.                
 
      
     long fStepsPerRevolution, fStepsPerRevolutionDefault;
@@ -74,10 +72,12 @@ class StepperClass
     // step_rev - step by revolution
     // type - model of driver (A4988 or DRV8825)
 
-    void Init();  
+    void Init(long minspeedd, long maxspeedd);  // as a time interval between steps in microseconds
 
     void EnablePower(boolean enable);
     void SetMicroStep(int new_micro_step);
+    long SetSpeed(long speed); // as a time interval between steps in microseconds
+    long GetSpeed();
 
     long Step(int dir);     
     long Roll(int dir);
