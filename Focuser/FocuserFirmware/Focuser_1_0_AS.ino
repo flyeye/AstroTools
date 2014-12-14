@@ -105,8 +105,8 @@ long old_position = 0;
 const int ROLLING_LEFT = -1;
 const int ROLLING_RIGHT = 1;
 const int HOLD = 0;
-int IsRolling = HOLD;  // Rolling status
-int IsRollingToNewPos = 0;  // Rolling to the new position status
+volatile int IsRolling = HOLD;  // Rolling status
+volatile int IsRollingToNewPos = 0;  // Rolling to the new position status
 
 unsigned long LastAction=0, LastPosCheck = 0, LastSpeedCheck = 0;
 
@@ -259,7 +259,7 @@ void serialEvent(){
             
           case FOCUSER_STOP:  // stop
              SendCmd(FOCUSER_STOP);             
-             IsRolling = false;    
+             IsRolling = HOLD;    
              SendCmd(FOCUSER_GET_POSITION, String(FocuserStepper.fPosition));                          
             break;             
             
