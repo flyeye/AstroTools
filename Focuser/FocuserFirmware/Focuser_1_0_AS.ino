@@ -26,8 +26,9 @@
 
 //#include <Stepper.h>
 #include <StepperClass.h>
+#include <EEPROM.h>
 
-const char SketchVersion[] = "1.2";
+const char SketchVersion[] = "1.3";
 
 // A4988 connection pins
 #define DirectionPin 9                      //Direction Pin - Initial State is ZERO
@@ -53,11 +54,14 @@ const int FOCUSER_STEP_LEFT = 209;
 const int FOCUSER_ROLL_LEFT = 208;
 const int FOCUSER_PING = 255;
 const int FOCUSER_HANDSHAKE = 254;
-const int FOCUSER_STEPPED = 253;
-const int FOCUSER_ROLLING = 252;
+const int FOCUSER_STEPPED = 203;
+const int FOCUSER_ROLLING = 202;
 const int FOCUSER_GET_SPEED = 240;  
 const int FOCUSER_SET_SPEED = 241;  
 const int FOCUSER_RELEASE = 220; 
+const int FOCUSER_GET_RELEASE_TIME = 221; 
+const int FOCUSER_SET_RELEASE_TIME = 222; 
+const int FOCUSER_POWER_ON = 223;
 const int FOCUSER_CMD_START = 168;
 const int FOCUSER_GET_MIN_SPEED_DELAY = 239;
 const int FOCUSER_GET_MAX_SPEED_DELAY = 238;
@@ -72,6 +76,10 @@ const int FOCUSER_CMD_STOP_1 = 13;
 const int FOCUSER_CMD_STOP_2 = 10;
 const int FOCUSER_CMD_DEBUG = 251;
 const int FOCUSER_DEBUG = 250;
+const int FOCUSER_RC = 252;
+const int FOCUSER_GET_VERSION = 253;
+
+#define DeviceType 101
 
 int SerialBuf[255];
 int BufLength = 0;
@@ -88,6 +96,7 @@ int buttonOldStateLeft = LOW;
 int buttonStateRight = 0;         // variable for reading the pushbutton status
 int buttonOldStateRight = LOW;
 
+int buttonPinState = LOW;
 
 // initialize the stepper library on pins 8 through 11, SeeedStudio MotorShield:
 //Stepper myStepper(stepsPerRevolution, 8,11,12,13);            
@@ -113,12 +122,13 @@ volatile int IsRollingToNewPos = 0;  // Rolling to the new position status
 
 unsigned long LastAction=0, LastPosCheck = 0, LastSpeedCheck = 0;
 
-int ReleaseTime = 2;   //  Idle time to release motor, in seconds
+#define RELEASE_TIME_ADDRESS  1
+volatile int ReleaseTime = 2;   //  Idle time to release motor, in seconds
 int CheckSpeedTime = 100;  //  
 
 // Some flags
-int IsDebug = 0;
-int IsRelease = true;
+volatile int IsDebug = 0;
+volatile int IsRC = true;
 
 
 // --------------- Initialization ------------------------------------
@@ -126,6 +136,14 @@ int IsRelease = true;
 
 void setup() {
 
+    if ( EEPROM.read(0) != 127){     
+       EEPROM.write(0, 127);       
+       ReleaseTime = 300;
+       EEPROM.write(RELEASE_TIME_ADDRESS, highByte(ReleaseTime));              
+       EEPROM.write(RELEASE_TIME_ADDRESS+1, lowByte(ReleaseTime));         
+    } else        
+       ReleaseTime = word(EEPROM.read(RELEASE_TIME_ADDRESS),EEPROM.read(RELEASE_TIME_ADDRESS+1));
+  
     FocuserStepper.Init(MIN_SPEED_DELAY, MAX_SPEED_DELAY);   
     FocuserStepper.SetMicroStep(DEFAULT_MS);
     FocuserStepper.SetSpeed(500);
@@ -241,7 +259,6 @@ void serialEvent(){
         }
                              
         LastAction = millis();    
-        String str = SketchVersion;
         command = SerialBuf[1];
         String param = "";
         for (int i=2; i<cmd_end; i++){
@@ -253,10 +270,14 @@ void serialEvent(){
         switch (command){
           case FOCUSER_PING:   //  ping back;
                SendCmd(FOCUSER_PING);
-             break;
+             break;                       
              
           case FOCUSER_HANDSHAKE:  // handshake
-              SendCmd(FOCUSER_HANDSHAKE, str);
+              SendCmd(FOCUSER_HANDSHAKE, DeviceType);
+            break; 
+            
+          case FOCUSER_GET_VERSION:  // handshake
+              SendCmd(FOCUSER_GET_VERSION, SketchVersion);
             break; 
             
           case FOCUSER_STOP:  // stop
@@ -353,14 +374,30 @@ void serialEvent(){
         case FOCUSER_SET_SPEED:{
                long new_speed = param.toInt();
                SetSpeed(new_speed);
-            break;              
-        }   
+            break; }   
          case FOCUSER_DEBUG:
              IsDebug = SerialBuf[2];
              SendCmd(FOCUSER_DEBUG, IsDebug);
             break;          
-       }      
-       
+         case FOCUSER_RC:
+             IsRC = SerialBuf[2];
+             SendCmd(FOCUSER_RC, IsRC);
+            break;              
+         case FOCUSER_GET_RELEASE_TIME:
+            SendCmd(FOCUSER_GET_RELEASE_TIME, String(ReleaseTime));
+            break; 
+         case FOCUSER_SET_RELEASE_TIME:
+            ReleaseTime = param.toInt();         
+            EEPROM.write(RELEASE_TIME_ADDRESS, highByte(ReleaseTime));              
+            EEPROM.write(RELEASE_TIME_ADDRESS+1, lowByte(ReleaseTime));              
+            SendCmd(FOCUSER_SET_RELEASE_TIME, String(ReleaseTime));            
+            break;          
+         case FOCUSER_POWER_ON:
+            FocuserStepper.EnablePower(true);      
+            SendCmd(FOCUSER_POWER_ON);
+            break;
+
+     }         
        BufLength = ShiftBuffer(SerialBuf, BufLength, cmd_end+2);
     }    
   } 
@@ -413,10 +450,18 @@ void Roll(int dir){    // Blinking with LED during while rolling
 
 void loop() {      
 
-  if (millis() - LastSpeedCheck > CheckSpeedTime){   // Potentiometer check
-     GetMotorSpeed();
-     LastSpeedCheck = millis();
-  }
+  if (IsRC){
+  
+    if (millis() - LastSpeedCheck > CheckSpeedTime){   // Potentiometer check
+       GetMotorSpeed();
+       LastSpeedCheck = millis();
+    }
+       
+    buttonStateLeft = digitalRead(buttonPinLeft);    // read buttons
+    buttonStateRight = digitalRead(buttonPinRight);       
+       
+    buttonPinState = digitalRead(buttonPinRelease);                 
+   }
           
   if (IsRollingToNewPos==HIGH){   // if Rolling to a new specified form PC position 
     
@@ -440,8 +485,6 @@ void loop() {
        SendCmd(FOCUSER_CMD_DEBUG, "distance:" + String(FocuserStepper.fRelativePosition));                                  
   } else {
 
-    buttonStateLeft = digitalRead(buttonPinLeft);    // read buttons
-    buttonStateRight = digitalRead(buttonPinRight);
     if ((buttonStateLeft==HIGH)||(IsRolling==ROLLING_LEFT)){  // and roll if pressed
        Roll(STEP_FORWARD);
        LastAction = millis();              
@@ -449,14 +492,11 @@ void loop() {
        Roll(STEP_BACKWARD);
        LastAction = millis();          
     }
-    buttonOldStateRight = buttonStateRight; 
-    buttonOldStateLeft = buttonStateLeft;
-  }    
-  
+  }  
+ 
   if (FocuserStepper.fEnabled){   // if out of use for the ReleaseTime - realse motor
-    int buttonPinState = digitalRead(buttonPinRelease);      
     int time_diff = (millis() - LastAction)/1000;
-    if ((buttonPinState==HIGH)||((time_diff>ReleaseTime)&&(IsRelease))){    
+    if ((buttonPinState==HIGH)||((time_diff>ReleaseTime)&&(ReleaseTime>0))){    
        FocuserStepper.EnablePower(false);      
        SendCmd(FOCUSER_RELEASE);      
     }       
@@ -467,6 +507,9 @@ void loop() {
       UpdatePosition();
       LastPosCheck = millis();
   }
+
+  buttonOldStateRight = buttonStateRight; 
+  buttonOldStateLeft = buttonStateLeft;  
   
 }
 

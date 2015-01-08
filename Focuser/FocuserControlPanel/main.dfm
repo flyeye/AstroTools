@@ -303,14 +303,20 @@ object Form1: TForm1
         TabOrder = 14
         OnClick = btnDeleteClick
       end
+      object cbPower: TCheckBox
+        Left = 16
+        Top = 282
+        Width = 77
+        Height = 17
+        Caption = 'Power'
+        Enabled = False
+        TabOrder = 15
+        OnClick = cbPowerClick
+      end
     end
     object Debug: TTabSheet
       Caption = 'Debug'
       ImageIndex = 1
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 395
       DesignSize = (
         216
         315)
@@ -322,16 +328,24 @@ object Form1: TForm1
         Anchors = [akLeft, akBottom]
         Caption = 'Microstep:'
       end
+      object Label1: TLabel
+        Left = 24
+        Top = 236
+        Width = 83
+        Height = 13
+        Alignment = taRightJustify
+        Anchors = [akLeft, akBottom]
+        Caption = 'Release Timeout:'
+      end
       object btnClearMem: TButton
-        Left = 13
-        Top = 288
+        Left = 3
+        Top = 287
         Width = 48
         Height = 24
         Anchors = [akRight, akBottom]
         Caption = 'Clear'
         TabOrder = 2
         OnClick = btnClearMemClick
-        ExplicitLeft = 3
       end
       object btnSend: TButton
         Left = 57
@@ -343,7 +357,6 @@ object Form1: TForm1
         Enabled = False
         TabOrder = 1
         OnClick = btnSendClick
-        ExplicitTop = 338
       end
       object eDataLine: TEdit
         Left = 3
@@ -356,17 +369,15 @@ object Form1: TForm1
         TabOrder = 0
         Text = '$'
         OnKeyDown = eDataLineKeyDown
-        ExplicitTop = 338
       end
       object memOut: TMemo
         Left = 3
         Top = 0
         Width = 210
-        Height = 229
+        Height = 185
         Anchors = [akLeft, akTop, akRight, akBottom]
         ScrollBars = ssVertical
         TabOrder = 4
-        ExplicitWidth = 200
       end
       object btnPing: TButton
         Left = 57
@@ -378,18 +389,16 @@ object Form1: TForm1
         Enabled = False
         TabOrder = 3
         OnClick = btnPingClick
-        ExplicitTop = 367
       end
       object cbShowDebugMsg: TCheckBox
-        Left = 0
-        Top = 235
-        Width = 146
+        Left = 3
+        Top = 191
+        Width = 148
         Height = 17
         Anchors = [akLeft, akBottom]
         Caption = 'Show debug message'
         TabOrder = 5
         OnClick = cbShowDebugMsgClick
-        ExplicitTop = 315
       end
       object cbMicroStep: TComboBox
         Left = 161
@@ -430,14 +439,41 @@ object Form1: TForm1
         TabOrder = 8
         OnClick = btnSetSpeedClick
       end
+      object cbRCP: TCheckBox
+        Left = 3
+        Top = 211
+        Width = 97
+        Height = 17
+        Anchors = [akLeft, akBottom]
+        Caption = 'Remote Control'
+        Checked = True
+        State = cbChecked
+        TabOrder = 9
+        OnClick = cbRCPClick
+      end
+      object Button1: TButton
+        Left = 168
+        Top = 231
+        Width = 35
+        Height = 25
+        Anchors = [akLeft, akBottom]
+        Caption = 'Set'
+        TabOrder = 10
+        OnClick = Button1Click
+      end
+      object eReleaseTime: TEdit
+        Left = 116
+        Top = 233
+        Width = 46
+        Height = 21
+        Anchors = [akLeft, akBottom]
+        TabOrder = 11
+        Text = '3'
+      end
     end
     object About: TTabSheet
       Caption = 'About'
       ImageIndex = 2
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 395
       DesignSize = (
         216
         315)
@@ -458,7 +494,7 @@ object Form1: TForm1
           ''
           ''
           'Focuser Control Panel'
-          'ver 1.1'
+          'ver 1.3'
           ''
           'Created by Alexey V. Popov'
           '9141866@gmail.com'

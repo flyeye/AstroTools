@@ -11,7 +11,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, ExtCtrls, IniFiles, Vcl.ComCtrls, Focuser, MMSystem;
+  StdCtrls, ExtCtrls, IniFiles, Vcl.ComCtrls, Focuser, MMSystem, fConnection;
 
   type TFocuserItem = class (TObject)
      Name:string;
@@ -72,6 +72,11 @@ type
     cbMicroStep: TComboBox;
     leSpeed: TLabeledEdit;
     btnSetSpeed: TButton;
+    cbRCP: TCheckBox;
+    Button1: TButton;
+    Label1: TLabel;
+    eReleaseTime: TEdit;
+    cbPower: TCheckBox;
     procedure btnConnectClick(Sender: TObject);
     procedure btnStopClick(Sender: TObject);
     procedure btnSendClick(Sender: TObject);
@@ -112,10 +117,16 @@ type
     procedure btnFocuserSaveClick(Sender: TObject);
     procedure btnSetSpeedClick(Sender: TObject);
     procedure cbShowDebugMsgClick(Sender: TObject);
+    procedure cbRCPClick(Sender: TObject);
+    procedure Button1Click(Sender: TObject);
+    procedure cbPowerClick(Sender: TObject);
   private
     { Private declarations }
 
   protected
+
+    procedure WMFocuserRCP(var Message:TMessage); message WM_DEVICE_RCP;
+
     procedure WMFocuserSpeed(var Message: TMessage); message WM_FOCUSER_SPEED;
     procedure WMFocuserMaxSpeed(var Message: TMessage); message WM_FOCUSER_GET_MAX_SPEED;
     procedure WMFocuserMinSpeed(var Message: TMessage); message WM_FOCUSER_GET_MIN_SPEED;
@@ -126,19 +137,20 @@ type
     procedure WMFocuserRollLeft(var Message: TMessage); message WM_FOCUSER_ROLL_LEFT;
     procedure WMFocuserStepped(var Message: TMessage); message WM_FOCUSER_STEPPED;
     procedure WMFocuserRolling(var Message: TMessage); message WM_FOCUSER_ROLLING;
-    procedure WMFocuserPing(var Message: TMessage); message WM_FOCUSER_PING;
-    procedure WMFocuserHandShake(var Message: TMessage); message WM_FOCUSER_HANDSHAKE;
+    procedure WMFocuserPing(var Message: TMessage); message WM_DEVICE_PING;
+    procedure WMFocuserHandShake(var Message: TMessage); message WM_DEVICE_HANDSHAKE;
     procedure WMFocuserRelease(var Message: TMessage); message WM_FOCUSER_RELEASE;
-    procedure WMFocuserUnknownMessage(var Message: TMessage); message WM_FOCUSER_UNKNOWN_MESSAGE;
+    procedure WMFocuserUnknownMessage(var Message: TMessage); message WM_DEVICE_UNKNOWN_MESSAGE;
     procedure WMFocuserMicroStep(var Message: TMessage); message WM_FOCUSER_MICROSTEP;
     procedure WMFocuserPosition(var Message: TMessage); message WM_FOCUSER_GET_POSITION;
     procedure WMFocuserResetPosition(var Message: TMessage); message WM_FOCUSER_RESET_POSITION;
     procedure WMFocuserGotoPosition(var Message: TMessage); message WM_FOCUSER_GO_TO_POSITION;
-    procedure WMFocuserMsgDebug(var Message:TMessage); message WM_FOCUSER_CMD_DEBUG;
+    procedure WMFocuserMsgDebug(var Message:TMessage); message WM_DEVICE_CMD_DEBUG;
     procedure WMFocuserMaxPosition(var Message:TMessage); message WM_FOCUSER_SET_MAX_POSITION;
     procedure WMFocuserRangeCheck(var Message:TMessage); message WM_FOCUSER_RANGE_CHECK;
-    procedure WMFocuserDebug(var Message:TMessage); message WM_FOCUSER_DEBUG;
-
+    procedure WMFocuserDebug(var Message:TMessage); message WM_DEVICE_DEBUG;
+    procedure WMFocuserReleaseTime(var Message:TMessage); message WM_FOCUSER_RELEASE_TIME;
+    procedure WMFocuserFirmwareVersion(var Message:TMessage); message WM_FIRMWARE_VERSION;
     procedure StopRolling;
 
   public
@@ -152,6 +164,8 @@ type
 //    FocuserList: array of TFocuserItem;
 //    FocuserCount:integer;
   end;
+
+const AppVer = '1.3';
 
 var
   Form1: TForm1;
@@ -246,24 +260,33 @@ end;
 
 procedure TForm1.WMFocuserDebug(var Message: TMessage);
 begin
- if Focuser.IsDebugging then
+ if Focuser.IsRCP then
+   Form1.memOut.Lines.Add('Remote control is ON')
+  else
+   Form1.memOut.Lines.Add('Remote control is OFF');
+end;
+
+procedure TForm1.WMFocuserRCP(var Message: TMessage);
+begin
+ if Focuser.IsDebug then
    Form1.memOut.Lines.Add('Debugging ON')
   else
    Form1.memOut.Lines.Add( 'Debugging OFF');
+  cbRCP.Checked := Focuser.IsRCP;
 end;
 
 procedure TForm1.WMFocuserMaxSpeed(var Message: TMessage);
 begin
-   Form1.lMinSpeed.Caption := IntToStr(1000000 div Focuser.MaxSpeed);
-   Form1.pgSpeed.Min := 1000000 div Focuser.MaxSpeed;
-   Form1.memOut.Lines.Add(FOCUSER_MESSAGES[13] + IntToStr(Focuser.MaxSpeed));
+   Form1.lMinSpeed.Caption := IntToStr(1000000 div Focuser.MinSpeed);
+   Form1.pgSpeed.Min := 1000000 div Focuser.MinSpeed;
+   Form1.memOut.Lines.Add(FOCUSER_MESSAGES[13] + IntToStr(Focuser.MinSpeed));
 end;
 
 procedure TForm1.WMFocuserMinSpeed(var Message: TMessage);
 begin
-   Form1.lMaxSpeed.Caption := IntToStr(1000000 div Focuser.MinSpeed);
-   Form1.pgSpeed.Max := 1000000 div Focuser.MinSpeed;
-   Form1.memOut.Lines.Add(FOCUSER_MESSAGES[13] + IntToStr(Focuser.MinSpeed));
+   Form1.lMaxSpeed.Caption := IntToStr(1000000 div Focuser.MaxSpeed);
+   Form1.pgSpeed.Max := 1000000 div Focuser.MaxSpeed;
+   Form1.memOut.Lines.Add(FOCUSER_MESSAGES[13] + IntToStr(Focuser.MaxSpeed));
 end;
 
 
@@ -297,31 +320,37 @@ end;
 procedure TForm1.WMFocuserStepRight(var Message: TMessage);
 begin
    Form1.memOut.Lines.Add(FOCUSER_MESSAGES[5]);
+   cbPower.Checked := true;
 end;
 
 procedure TForm1.WMFocuserRollRight(var Message: TMessage);
 begin
    Form1.memOut.Lines.Add(FOCUSER_MESSAGES[8]);
+   cbPower.Checked := true;
 end;
 
 procedure TForm1.WMFocuserStepLeft(var Message: TMessage);
 begin
    Form1.memOut.Lines.Add(FOCUSER_MESSAGES[6]);
+   cbPower.Checked := true;
 end;
 
 procedure TForm1.WMFocuserRollLeft(var Message: TMessage);
 begin
    Form1.memOut.Lines.Add(FOCUSER_MESSAGES[7]);
+   cbPower.Checked := true;
 end;
 
 procedure TForm1.WMFocuserStepped(var Message: TMessage);
 begin
    Form1.memOut.Lines.Add(FOCUSER_MESSAGES[4]);
+   cbPower.Checked := true;
 end;
 
 procedure TForm1.WMFocuserRolling(var Message: TMessage);
 begin
    Form1.memOut.Lines.Add(FOCUSER_MESSAGES[9]);
+   cbPower.Checked := true;
 end;
 
 procedure TForm1.WMFocuserPing(var Message: TMessage);
@@ -329,14 +358,25 @@ begin
    Form1.memOut.Lines.Add(FOCUSER_MESSAGES[11]);
 end;
 
+procedure TForm1.WMFocuserFirmwareVersion(var Message:TMessage);
+begin
+    Form1.memOut.Lines.Add(FOCUSER_MESSAGES[1] + Focuser.Version);
+    if Focuser.Version <> AppVer then
+       Form1.memOut.Lines.Add('Application and firmware has different version!');
+end;
+
 procedure TForm1.WMFocuserHandShake(var Message: TMessage);
 begin
-  Form1.memOut.Lines.Add(FOCUSER_MESSAGES[1] + Focuser.Version);
+  if (Message.WParam>0) then
+    Form1.memOut.Lines.Add('Focuser connected successfully!')
+  else
+    Form1.memOut.Lines.Add('Wrong device is connected! DevType:' + IntToStr(Message.LParam))
 end;
 
 procedure TForm1.WMFocuserRelease(var Message: TMessage);
 begin
    Form1.memOut.Lines.Add(FOCUSER_MESSAGES[10]);
+   cbPower.Checked := false;
 end;
 
 procedure TForm1.WMFocuserPosition(var Message: TMessage);
@@ -363,6 +403,12 @@ end;
 procedure TForm1.WMFocuserResetPosition(var Message: TMessage);
 begin
   Form1.memOut.Lines.Add(FOCUSER_MESSAGES[16]);
+end;
+
+procedure TForm1.WMFocuserReleaseTime(var Message:TMessage);
+begin
+  Form1.memOut.Lines.Add('New release timeout: ' + IntToStr(Focuser.ReleaseTime));
+  eReleaseTime.Text := IntToStr(Focuser.ReleaseTime);
 end;
 
 procedure TForm1.WMFocuserGotoPosition(var Message: TMessage);
@@ -407,7 +453,7 @@ begin
   Focuser.MaxPosition := TFocuserItem(cbFocuser.Items.Objects[cbFocuser.ItemIndex]).MaxPos;
   Focuser.Position := TFocuserItem(cbFocuser.Items.Objects[cbFocuser.ItemIndex]).CurrentPos;
   Focuser.RangeCheck := TFocuserItem(cbFocuser.Items.Objects[cbFocuser.ItemIndex]).RangeCheck;
-  Focuser.IsDebugging := Settings.ReadBool('General', 'SHOW_DEBUG', false);
+  Focuser.IsDebug := Settings.ReadBool('General', 'SHOW_DEBUG', false);
 
   cbGoto.Items.Clear;
   cbGoto.Items.Add('Rightmost (0)');
@@ -446,6 +492,7 @@ begin
  cbRangeCheck.Enabled := true;
  cbGoto.Enabled := true;
  btnGoto.Enabled := true;
+ cbPower.Enabled := true;
 
  cbGotoChange(Sender);
 
@@ -577,7 +624,12 @@ begin
   cbRangeCheck.Enabled := false;
   btnGoto.Enabled := false;
   cbGoto.Enabled := false;
+  cbPower.Enabled := false;
+end;
 
+procedure TForm1.Button1Click(Sender: TObject);
+begin
+   Focuser.ReleaseTime := StrToInt(eReleaseTime.Text);
 end;
 
 procedure TForm1.btnGotoClick(Sender: TObject);
@@ -754,14 +806,27 @@ begin
      Focuser.MicroStep := cbMicroStep.ItemIndex;
 end;
 
+procedure TForm1.cbPowerClick(Sender: TObject);
+begin
+   if (cbPower.Checked=false) then
+     Focuser.Release
+   else
+     Focuser.PowerOn;
+end;
+
 procedure TForm1.cbRangeCheckClick(Sender: TObject);
 begin
    Focuser.RangeCheck := cbRangeCheck.Checked;
 end;
 
+procedure TForm1.cbRCPClick(Sender: TObject);
+begin
+   Focuser.IsRCP := cbRCP.Checked;
+end;
+
 procedure TForm1.cbShowDebugMsgClick(Sender: TObject);
 begin
-   Focuser.IsDebugging := Form1.cbShowDebugMsg.Checked;
+   Focuser.IsDebug := Form1.cbShowDebugMsg.Checked;
 end;
 
 procedure TForm1.eDataLineKeyDown(Sender: TObject; var Key: Word;
@@ -870,11 +935,8 @@ end;
 
 
 procedure TForm1.btnSendClick(Sender: TObject);
-var
- X:byte;
 begin
-  X:=StrToInt(eDataline.Text);
-  Focuser.SendData(X);
+  Focuser.SendDebugCommand(StrToInt(eDataline.Text));
 end;
 
 end.
