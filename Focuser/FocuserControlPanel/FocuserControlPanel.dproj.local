@@ -1,14 +1,14 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <BorlandProject>
 	<Transactions>
-    <Transaction>1899.12.30 00:00:00.000.885,D:\Focuser\Unit2.dfm=D:\Focuser\About.dfm</Transaction>
-    <Transaction>1899.12.30 00:00:00.000.068,D:\Focuser\Unit1.pas=D:\Focuser\Focuser.pas</Transaction>
-    <Transaction>1899.12.30 00:00:00.000.818,=D:\Focuser\Unit2.pas</Transaction>
-    <Transaction>1899.12.30 00:00:00.000.885,D:\Focuser\Unit2.pas=D:\Focuser\About.pas</Transaction>
-    <Transaction>1899.12.30 00:00:00.000.900,=D:\Focuser\Unit1.pas</Transaction>
-    <Transaction>1899.12.30 00:00:00.000.562,D:\Focuser\TestComm.dproj=D:\Focuser\FocuserControlPanel.dproj</Transaction>
-    <Transaction>1899.12.30 00:00:00.000.475,D:\Focuser\PortUnit.pas=</Transaction>
     <Transaction>1899.12.30 00:00:00.000.527,D:\Focuser\About.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.885,D:\Focuser\About.pas=D:\Focuser\Unit2.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.818,=D:\Focuser\Unit2.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.900,=D:\Focuser\Unit1.pas</Transaction>
     <Transaction>1899.12.30 00:00:00.000.047,=D:\FConnections\FConnection.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.885,D:\Focuser\About.dfm=D:\Focuser\Unit2.dfm</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.475,D:\Focuser\PortUnit.pas=</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.068,D:\Focuser\Focuser.pas=D:\Focuser\Unit1.pas</Transaction>
+    <Transaction>1899.12.30 00:00:00.000.562,D:\Focuser\FocuserControlPanel.dproj=D:\Focuser\TestComm.dproj</Transaction>
   </Transactions>
 </BorlandProject>

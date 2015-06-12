@@ -45,26 +45,32 @@ St.Peterburg, Russia
 #define MICROSTEP8 3
 #define MICROSTEP16 4
 #define MICROSTEP32 5
-//const int MICROSTEPS[] = {32,16,8,4,2,1};
+const int MICROSTEPS[] = {32,16,8,4,2,1};
+
+enum POS_TYPE {CURRENT, MIN, MAX};
 
 class StepperClass
 {
   private:
     int fStepPin, fDirPin, fEnablePin, fMS1Pin, fMS2Pin, fMS3Pin, fSleepPin;
-    unsigned long fLastStep;
     int fType;
 
     int fStepTime_microsec;
-    long fSpeed, fMinSpeedDelay, fMaxSpeedDelay; 
 
   public:
-    long fPosition, fMaxPosition, fMinPosition, fTargetPosition, fRelativePosition;  
 
+    long fSpeed, fMinSpeedDelay, fMaxSpeedDelay; 
+    unsigned long fLastStep;
+
+    long fPosition, fMaxPosition, fMinPosition, fTargetPosition, fRelativePosition;  
+    unsigned long fRealLastStep, fRealStepTime;    
      
     long fStepsPerRevolution, fStepsPerRevolutionDefault;
     int fMicroStep;
     int fMicroSteps[10]; 
+
     boolean fEnabled, fRangeCheck;
+    bool fIsDelayCompensation;
 
     StepperClass(byte step, byte dir, byte enable, byte ms1, byte ms2, byte ms3, /*byte sleep,*/ int step_rev, int type);
     // step, dir - step and dir pins
@@ -77,10 +83,14 @@ class StepperClass
     void EnablePower(boolean enable);
     void SetMicroStep(int new_micro_step);
     long SetSpeed(long speed); // as a time interval between steps in microseconds
-    long GetSpeed();
+    long GetSpeed();    
+    
+    void SetCompensation(bool compensate);
+    bool GetCompensation();
 
     long Step(int dir);     
     long Roll(int dir);
+    void Stop();
 
 
 };

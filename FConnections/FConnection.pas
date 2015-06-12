@@ -8,26 +8,42 @@ uses
 type TCommandData = array [0..256] of byte;
      TBuffer = array [0..1024] of byte;
 
+type TWord = record
+       case byte of
+          0: (b1, b2:byte);
+          1: (wrd1:word);
+       end;
+     TInteger = record
+       case byte of
+          0: (wrd1, wrd2:word);
+          1: (int:integer);
+          2: (b1, b2, b3, b4:byte);
+       end;
+
 //  FBC Protocol
 // 168 - превый байт команды, #13#10 - конец комнды
 
- const FBC_CMD_DEBUG = 205;
-
+ const FBC_DEBUG_MSG = 250;
  const FBC_DEBUG = 251;
  const FBC_RCP = 252;  // Remote Control Panel
  const FBC_GET_FIRMWARE_VERSION = 253;
  const FBC_HANDSHAKE = 254;
  const FBC_PING = 255;
 
+ const FBC_RTC_GET = 90;
+ const FBC_RTC_SET = 91;
+ const FBC_RTC_TEMP = 92;
+
 //  Windows mrssages
  const WM_DEVICE_PING = WM_APP + FBC_PING;
  const WM_DEVICE_HANDSHAKE = WM_APP + FBC_HANDSHAKE;
  const WM_DEVICE_UNKNOWN_MESSAGE = WM_APP + 256;
- const WM_DEVICE_CMD_DEBUG = WM_APP + FBC_CMD_DEBUG;
+ const WM_DEVICE_DEBUG_MSG = WM_APP + FBC_DEBUG_MSG;
  const WM_DEVICE_DEBUG = WM_APP + FBC_DEBUG;
  const WM_DEVICE_RCP = WM_APP + FBC_RCP;
  const WM_FIRMWARE_VERSION = WM_APP + FBC_GET_FIRMWARE_VERSION;
-
+ const WM_RTC_TEMP = WM_APP + FBC_RTC_TEMP;
+ const WM_RTC_GET = WM_APP + FBC_RTC_GET;
 //  Devices
 
  const FD_NONE = 100;
@@ -51,6 +67,9 @@ type TCommandData = array [0..256] of byte;
       fBuff:TBuffer;
       fPrevSize:DWORD;
 
+      fRTCTemp:double;
+      fRTCDateTimeStr:string;
+
       fIsDebug:boolean;
       fIsRCP_ON:boolean;  //  блокировка пульта ДУ, false - заблокировано
 
@@ -58,10 +77,15 @@ type TCommandData = array [0..256] of byte;
       fDeviceDbgMsg:array of string;
       fDeviceType:integer;
 
-      procedure SendData(cmd:byte; data:byte); overload;
-      procedure SendData(cmd:byte; par:byte; data:byte); overload;
-      procedure SendData(cmd:byte; data:string); overload;
+      fIsConnected:boolean;
+
       procedure SendData(cmd:byte); overload;
+      procedure SendData(cmd:byte; data:byte); overload;
+      procedure SendData(cmd:byte; data:word); overload;
+      procedure SendData(cmd:byte; data:longword); overload;
+      procedure SendData(cmd:byte; data:string); overload;
+      procedure SendData(cmd:byte; par:byte; data:byte); overload;
+      procedure SendData(cmd:byte; par:byte; data:integer); overload;
 
       class function ThreadProc(Param: Pointer): DWord; stdcall; static;
       function GeTCommandData:integer;
@@ -72,20 +96,31 @@ type TCommandData = array [0..256] of byte;
 
       procedure fSetIsDebug(debug:boolean);
       procedure fSetRCP(status:boolean);
+      procedure fRTCSetDateTimeStr(datetime:string);
+
+      Procedure OnHandshake; virtual;
 
    public
       Constructor Init; virtual;
       function Connect(port:string; handle:HWND):integer; virtual;
+      procedure ReConnect;                                                        // Send handshake command
       procedure Disconnect; virtual;
+      property IsConnected:boolean read fIsConnected;
 
       property UnknownMessage:string read fUnknownMessage;
       property LastDebugMessage:string read fGetLastDeviceDbgMsg;
       property Version:string read fDeviceVersion;
       property LastError:DWORD read fError;
       property IsDebug:boolean read fIsDebug write fSetIsDebug;
+
       property IsRCP:boolean read fIsRCP_ON write fSetRCP;
+      property RTCTemperature:double read fRTCTemp;
+      property RTCDateTimeStr:string read fRTCDateTimeStr write fRTCSetDateTimeStr;
 
       Procedure Ping;
+
+      Procedure GetTemperature;
+      Procedure GetDateTime;
 
       procedure SendDebugCommand(cmd:byte);
 
@@ -117,6 +152,8 @@ begin
   CommHandle := 0;
   ThreadID := 0;
   fError := 0;
+  fRTCTemp := 0;
+  fIsConnected := false;
 
   fDeviceType := FD_NONE;
 
@@ -165,7 +202,8 @@ begin
    SetCommMask(CommHandle,EV_RXFLAG);
 
    GetCommState(CommHandle,DCB);
-   DCB.BaudRate:=CBR_9600;
+   DCB.BaudRate:=CBR_115200;
+//   DCB.BaudRate:=CBR_9600;
    DCB.Parity:=NOPARITY;
    DCB.ByteSize:=8;
    DCB.StopBits:=OneStopBit;
@@ -174,10 +212,16 @@ begin
 
    CommThread := CreateThread(nil,0,@ThreadProc, Self,0,ThreadID);
 
+//   SendData(FBC_DEBUG, 1);
+
    SendData(FBC_HANDSHAKE);   // FirmwareVersion request
-   SendData(FBC_GET_FIRMWARE_VERSION);
 end;
 
+
+procedure TFBasicCom.ReConnect;
+begin
+   SendData(FBC_HANDSHAKE);   // FirmwareVersion request
+end;
 
 procedure TFBasicCom.Disconnect;
 begin
@@ -218,6 +262,58 @@ begin
    WriteFile(CommHandle,Transmit,sendsize,sendsize,@Ovr);
 end;
 
+procedure TFBasicCom.SendData(cmd:byte; data:word);
+var Transmit:array [0..255] of byte;
+    sendsize:DWORD;
+    data_b:TWord;
+begin
+   data_b.wrd1 := data;
+   sendsize:=6;
+   Transmit[0]:=168;
+   Transmit[1]:=cmd;
+   Transmit[2]:=data_b.b1;
+   Transmit[3]:=data_b.b2;
+   Transmit[4]:=13;
+   Transmit[5]:=10;
+   WriteFile(CommHandle,Transmit,sendsize,sendsize,@Ovr);
+end;
+
+procedure TFBasicCom.SendData(cmd:byte; data:longword);
+var Transmit:array [0..255] of byte;
+    sendsize:DWORD;
+    data_b:TInteger;
+begin
+   data_b.int := data;
+   sendsize:=8;
+   Transmit[0]:=168;
+   Transmit[1]:=cmd;
+   Transmit[2]:=data_b.b1;
+   Transmit[3]:=data_b.b2;
+   Transmit[4]:=data_b.b3;
+   Transmit[5]:=data_b.b4;
+   Transmit[6]:=13;
+   Transmit[7]:=10;
+   WriteFile(CommHandle,Transmit,sendsize,sendsize,@Ovr);
+end;
+
+procedure TFBasicCom.SendData(cmd:byte; par:byte; data:integer);
+var Transmit:array [0..255] of byte;
+    sendsize:DWORD;
+    data_b:TInteger;
+begin
+   data_b.int := data;
+   sendsize:=9;
+   Transmit[0]:=168;
+   Transmit[1]:=cmd;
+   Transmit[2]:=par;
+   Transmit[3]:=data_b.b1;
+   Transmit[4]:=data_b.b2;
+   Transmit[5]:=data_b.b3;
+   Transmit[6]:=data_b.b4;
+   Transmit[7]:=13;
+   Transmit[8]:=10;
+   WriteFile(CommHandle,Transmit,sendsize,sendsize,@Ovr);
+end;
 
 procedure TFBasicCom.SendData(cmd:byte; par:byte; data:byte);
 var
@@ -257,6 +353,13 @@ procedure TFBasicCom.SendDebugCommand(cmd:byte);
 begin
   SendData(cmd);
 end;
+
+Procedure TFBasicCom.GetTemperature;
+begin
+  SendData(FBC_RTC_TEMP);
+end;
+
+
 
 function FindCmdStart(data:TBuffer; size:integer):integer;
    var i:integer;
@@ -350,6 +453,13 @@ begin
     end;
 end;
 
+Procedure TFBasicCom.OnHandshake;
+begin
+    fIsConnected := true;
+    SendData(FBC_GET_FIRMWARE_VERSION);
+    SendData(FBC_RCP, 1);
+end;
+
 procedure TFBasicCom.ParseData(data:TCommandData; size:integer);
 var s:string;
 begin
@@ -358,14 +468,17 @@ begin
         FBC_HANDSHAKE:
           begin
             if (data[2] = fDeviceType) then
-               PostMessage(ParentHandle, WM_DEVICE_HANDSHAKE, 1, data[2])
+              begin
+                PostMessage(ParentHandle, WM_DEVICE_HANDSHAKE, 1, data[2]);
+                OnHandshake;
+              end
             else
                PostMessage(ParentHandle, WM_DEVICE_HANDSHAKE, 0, data[2]);
           end;
-        FBC_CMD_DEBUG:
+        FBC_DEBUG_MSG:
           begin
             fAddLastDeviceDbgMsg(ByteArrayToStr(data, 2, size-1));
-            PostMessage(ParentHandle, WM_DEVICE_CMD_DEBUG, 0, 0);
+            PostMessage(ParentHandle, WM_DEVICE_DEBUG_MSG, 0, 0);
           end;
        FBC_PING:
           PostMessage(ParentHandle, WM_DEVICE_PING, 0, 0);
@@ -389,6 +502,16 @@ begin
          begin
            fDeviceVersion := ByteArrayToStr(data, 2, 4);
            PostMessage(ParentHandle, WM_FIRMWARE_VERSION, 0, 0);
+         end;
+       FBC_RTC_TEMP:
+         begin
+           fRTCTemp := StrToFloat(ByteArrayToStr(data, 2, size-1));
+           PostMessage(ParentHandle, WM_RTC_TEMP, 0, 0);
+         end;
+       FBC_RTC_GET, FBC_RTC_SET:
+         begin
+           fRTCDateTimeStr := ByteArrayToStr(data, 2, size-1);
+           PostMessage(ParentHandle, WM_RTC_GET, 0, 0);
          end
         else
          begin
@@ -400,11 +523,10 @@ begin
        On EConvertError do
          begin
            fAddLastDeviceDbgMsg('Convert error!  Cmd:' + IntToStr(data[1]) + ' ' + s);
-           PostMessage(ParentHandle, WM_DEVICE_CMD_DEBUG, 1, 0);
+           PostMessage(ParentHandle, WM_DEVICE_DEBUG_MSG, 1, 0);
          end;
      end;
 end;
-
 
 
 procedure TFBasicCom.fSetIsDebug(debug:boolean);
@@ -428,5 +550,15 @@ begin
       SendData(FBC_RCP, 0);
 end;
 
+Procedure TFBasicCom.GetDateTime;
+begin
+   SendData(FBC_RTC_GET);
+end;
+
+
+procedure TFBasicCom.fRTCSetDateTimeStr(datetime:string);
+begin
+  SendData(FBC_RTC_SET, datetime);
+end;
 
 end.

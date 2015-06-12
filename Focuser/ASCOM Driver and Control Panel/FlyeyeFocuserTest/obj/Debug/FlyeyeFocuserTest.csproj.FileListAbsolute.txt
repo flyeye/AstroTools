@@ -1,0 +1,8 @@
+C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuserTest\bin\Debug\ASCOM.FlyeyeFocuserV1.Test.exe.config
+C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuserTest\bin\Debug\ASCOM.FlyeyeFocuserV1.Test.exe
+C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuserTest\bin\Debug\ASCOM.FlyeyeFocuserV1.Test.pdb
+C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuserTest\obj\Debug\ASCOM.FlyeyeFocuserV1.Form1.resources
+C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuserTest\obj\Debug\ASCOM.FlyeyeFocuserV1.Properties.Resources.resources
+C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuserTest\obj\Debug\FlyeyeFocuserTest.csproj.GenerateResource.Cache
+C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuserTest\obj\Debug\ASCOM.FlyeyeFocuserV1.Test.exe
+C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuserTest\obj\Debug\ASCOM.FlyeyeFocuserV1.Test.pdb

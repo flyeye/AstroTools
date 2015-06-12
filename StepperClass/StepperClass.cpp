@@ -38,6 +38,10 @@ StepperClass::StepperClass(byte step, byte dir, byte enable, byte ms1, byte ms2,
    fStepTime_microsec = 2;
    
    fLastStep = 0;
+   fRealStepTime = 0;
+   fRealLastStep = 0;
+
+   fIsDelayCompensation = false;
 }
 
 void StepperClass::Init(long minspeedd, long maxspeedd)
@@ -96,22 +100,45 @@ long StepperClass::Step(int dir)
     delayMicroseconds(fStepTime_microsec);
     digitalWrite(fStepPin,LOW);
     delayMicroseconds(fStepTime_microsec);
+   
+    unsigned long t = micros(); 
+    if (fRealLastStep==0)
+      fRealStepTime = GetSpeed();
+    else 
+      fRealStepTime =  t - fRealLastStep;    
+    fRealLastStep = t;
 
     fPosition+=dir*fMicroSteps[fMicroStep];
-    
+   
     return dir*fMicroSteps[fMicroStep];
 
 }   
 
 long StepperClass::Roll(int dir)
 {
-      long t = micros();
-      long dt = t - fLastStep;    
-      if (abs(dt)<fSpeed)
+      if ( micros() - fLastStep < fSpeed)
          return 0;     
-      fLastStep = t;     
-      return Step(dir);
+
+      if (micros()-fRealLastStep < fMaxSpeedDelay) 
+         return 0;
+
+      long res = Step(dir);
+      if (res!=0){
+          if ((fLastStep==0)||(fIsDelayCompensation==0))
+            fLastStep = fRealLastStep; 
+         else  
+            fLastStep += fSpeed;   //  Для компенсации пропущенных шагов  
+      }
+
+      return res;
 }
+
+void StepperClass::Stop()
+{
+      fLastStep = 0;
+      fRealLastStep = 0;
+}
+
 
 void StepperClass::SetMicroStep(int new_micro_step)
 {
@@ -166,11 +193,12 @@ void StepperClass::SetMicroStep(int new_micro_step)
 
 long StepperClass::SetSpeed(long speed)
 {
-     if (speed>fMinSpeedDelay)
+/*     if (speed>fMinSpeedDelay)
           fSpeed = fMinSpeedDelay;
      else if (speed<fMaxSpeedDelay)
           fSpeed = fMaxSpeedDelay;                  
-     else fSpeed = speed;
+     else  */
+          fSpeed = speed;
 
      return fSpeed;
 }
@@ -179,4 +207,15 @@ long StepperClass::SetSpeed(long speed)
 long StepperClass::GetSpeed()
 {
      return fSpeed;
+}
+
+void StepperClass::SetCompensation(bool compensate)
+{
+     fIsDelayCompensation = true;               	
+     fLastStep = 0;
+}
+
+bool StepperClass::GetCompensation()
+{
+     return fIsDelayCompensation;
 }

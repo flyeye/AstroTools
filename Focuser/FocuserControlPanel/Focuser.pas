@@ -18,7 +18,6 @@ uses windows, sysutils, messages, FConnection;
  const FOCUSER_ROLL_RIGHT = 212;       // вращение вправо с заданной скоростью
  const FOCUSER_STEP_LEFT = 209;        // шаг влево
  const FOCUSER_ROLL_LEFT = 208;        // вращение влево с заданной скоростью
- const FOCUSER_STEPPED = 203;          // нотификация о том, что мотор шагнул
  const FOCUSER_ROLLING = 202;          // нотификация о вращении с заданной скоростью
  const FOCUSER_GET_SPEED = 240;        // получить текущую скорость
  const FOCUSER_SET_SPEED = 241;        // установить текущую скорость
@@ -30,11 +29,13 @@ uses windows, sysutils, messages, FConnection;
  const FOCUSER_POWER_ON = 223;         // Принудительно подать питание на мотор
  const FOCUSER_SET_MICROSTEP = 231;    // установить режим микрошага
  const FOCUSER_GET_MICROSTEP = 230;    // получить режим микрошага
+ const FOCUSER_SET_POSITION = 229;     // установить текущее положение
  const FOCUSER_GET_POSITION = 225;     // получить текущее положение
  const FOCUSER_GO_TO_POSITION = 226;   // вращаться до заданной позиции
- const FOCUSER_RESET_POSITION = 227;   // сбросить текущее положение в 0
+ const FOCUSER_SET_MIN_POSITION = 227; // установить максимальное положение
  const FOCUSER_SET_MAX_POSITION = 228; // установить максимальное положение
- const FOCUSER_SET_POSITION = 229;     // установить текущее положение
+ const FOCUSER_GET_MIN_POSITION = 233;
+ const FOCUSER_GET_MAX_POSITION = 224;
  const FOCUSER_RANGE_CHECK=215;        // вкл/выкл проверку выхода за границы по положению
 
 
@@ -50,13 +51,11 @@ uses windows, sysutils, messages, FConnection;
  const WM_FOCUSER_ROLL_RIGHT = WM_APP + FOCUSER_ROLL_RIGHT;
  const WM_FOCUSER_STEP_LEFT = WM_APP + FOCUSER_STEP_LEFT;
  const WM_FOCUSER_ROLL_LEFT = WM_APP + FOCUSER_ROLL_LEFT;
- const WM_FOCUSER_STEPPED = WM_APP + FOCUSER_STEPPED;
  const WM_FOCUSER_ROLLING = WM_APP + FOCUSER_ROLLING;
  const WM_FOCUSER_RELEASE = WM_APP + FOCUSER_RELEASE;
  const WM_FOCUSER_MICROSTEP = WM_APP + FOCUSER_GET_MICROSTEP;
  const WM_FOCUSER_GET_POSITION = WM_APP + FOCUSER_GET_POSITION;
  const WM_FOCUSER_GO_TO_POSITION = WM_APP + FOCUSER_GO_TO_POSITION;
- const WM_FOCUSER_RESET_POSITION = WM_APP + FOCUSER_RESET_POSITION;
  const WM_FOCUSER_SET_MAX_POSITION = WM_APP + FOCUSER_SET_MAX_POSITION;
  const WM_FOCUSER_RANGE_CHECK= WM_APP+FOCUSER_RANGE_CHECK;
  const WM_FOCUSER_RELEASE_TIME = WM_APP + FOCUSER_GET_RELAESE_TIME;
@@ -66,7 +65,7 @@ uses windows, sysutils, messages, FConnection;
      'Firmware version: ',  //1
      'Motor speed: ',       //2
      'Motor Stopped!',      //3
-     'Stepped!',            //4
+     '',            //4
      'One step right..',    //5
      'One step left..',     //6
      'Roll left..',         //7
@@ -85,14 +84,14 @@ uses windows, sysutils, messages, FConnection;
      'Range check:'                 // 20
      );
 
- const MICROSTEPS:array [0..4] of integer = (16,8,4,2,1);
+{ const MICROSTEPS:array [0..4] of integer = (16,8,4,2,1);
 
  const MICROSTEP1 = 0;
  const MICROSTEP2 = 1;
  const MICROSTEP4 = 2;
  const MICROSTEP8 = 3;
  const MICROSTEP16 = 4;
- const MICROSTEP32 = 5;
+ const MICROSTEP32 = 5; }
 
 
  type TFocuser = class(TFBasicCom)
@@ -100,7 +99,7 @@ uses windows, sysutils, messages, FConnection;
     protected
       fSpeed, fMaxSpeedDelay, fMinSpeedDelay:integer;
       fMicroStep:integer;
-      fPosition, fMaxPosition:integer;
+      fPosition, fMinPosition, fMaxPosition:integer;
       fRangeCheck:boolean;
       fReleaseTime:integer;   // in seconds
 
@@ -110,10 +109,13 @@ uses windows, sysutils, messages, FConnection;
       procedure fSetMicroStep(step:integer);
 
       procedure fSetMaxPosition(pos:integer);
+      procedure fSetMinPosition(pos:integer);
       procedure fSetPosition(pos:integer);
 
       procedure fSetRangeCheck(check:boolean);
       procedure fSetReleaseTime(timeout:integer);
+
+      procedure OnHandshake; virtual;
 
     public
 
@@ -127,6 +129,7 @@ uses windows, sysutils, messages, FConnection;
       property MicroStep:integer read fMicroStep write fSetMicroStep;
       property Position:integer read fPosition write fSetPosition;
       property MaxPosition:integer read fMaxPosition write fSetMaxPosition;
+      property MinPosition:integer read fMinPosition write fSetMinPosition;
       property RangeCheck:boolean read fRangeCheck write fSetRangeCheck;
       property ReleaseTime:integer read fReleaseTime write fSetReleaseTime;
 
@@ -137,7 +140,6 @@ uses windows, sysutils, messages, FConnection;
       Procedure Stop;
       Procedure Release;
       Procedure PowerOn;
-      Procedure ResetPosition;
       procedure GotoPosition(pos:integer);
 
  end;
@@ -163,7 +165,7 @@ end;
 
 procedure TFocuser.fSetMicroStep(step:integer);
 begin
-    SendData(FOCUSER_SET_MICROSTEP, IntToStr(step));
+    SendData(FOCUSER_SET_MICROSTEP, byte(step));
 end;
 
 
@@ -175,12 +177,7 @@ begin
    if (result<>0) then
        exit;
 
-   SendData(FOCUSER_GET_MICROSTEP);  //  Get microstep mode
-   SendData(FOCUSER_GET_MIN_SPEED_DELAY);   // Get motor max speed
-   SendData(FOCUSER_GET_MAX_SPEED_DELAY);   // Get motor min speed
-   SendData(FOCUSER_GET_RELAESE_TIME);  // Get motor release delay
-   SendData(FOCUSER_GET_SPEED);   // Get motor current speed
-   SendData(FOCUSER_GET_POSITION);   // Get motor current position
+
 end;
 
 procedure TFocuser.Disconnect;
@@ -232,11 +229,6 @@ begin
   SendData(FOCUSER_GO_TO_POSITION, IntToStr(pos));
 end;
 
-Procedure TFocuser.ResetPosition;
-begin
-  SendData(FOCUSER_RESET_POSITION);
-end;
-
 procedure TFocuser.fSetReleaseTime(timeout:integer);
 begin
      SendData(FOCUSER_SET_RELAESE_TIME, IntToStr(timeout));
@@ -255,15 +247,46 @@ begin
   SendData(FOCUSER_SET_MAX_POSITION, IntToStr(pos));
 end;
 
+procedure TFocuser.fSetMinPosition(pos:integer);
+begin
+  SendData(FOCUSER_SET_MIN_POSITION, IntToStr(pos));
+end;
+
 procedure TFocuser.fSetPosition(pos:integer);
 begin
   SendData(FOCUSER_SET_POSITION, IntToStr(pos));
 end;
 
+procedure TFocuser.OnHandshake;
+begin
+
+   Inherited OnHandshake;
+
+   SendData(FOCUSER_GET_MICROSTEP);  //  Get microstep mode
+   SendData(FOCUSER_GET_MIN_SPEED_DELAY);   // Get motor max speed
+   SendData(FOCUSER_GET_MAX_SPEED_DELAY);   // Get motor min speed
+   SendData(FOCUSER_GET_RELAESE_TIME);  // Get motor release delay
+   SendData(FOCUSER_GET_SPEED);   // Get motor current speed
+   SendData(FOCUSER_GET_POSITION);   // Get motor current position
+   SendData(FOCUSER_GET_MAX_POSITION);   // Get motor current position
+   SendData(FOCUSER_GET_MIN_POSITION);   // Get motor current position
+
+end;
 
 procedure TFocuser.ParseData(data:TCommandData; size:integer);
 begin
       case data[1] of
+        FBC_HANDSHAKE:
+          begin
+            if (data[2] = fDeviceType) then
+              begin
+                PostMessage(ParentHandle, WM_DEVICE_HANDSHAKE, 1, data[2]);
+                OnHandshake;
+              end
+            else
+               PostMessage(ParentHandle, WM_DEVICE_HANDSHAKE, 0, data[2]);
+            exit;
+          end;
         FOCUSER_GET_SPEED:
           begin
             fSpeed := StrToInt(ByteArrayToStr(data, 2, size-1));
@@ -283,11 +306,6 @@ begin
         FOCUSER_STEP_LEFT:
           begin
             PostMessage(ParentHandle, WM_FOCUSER_STEP_LEFT, 0, 0);
-            exit;
-          end;
-        FOCUSER_STEPPED:
-          begin
-            PostMessage(ParentHandle, WM_FOCUSER_STEPPED, 0, 0);
             exit;
           end;
        FOCUSER_ROLL_RIGHT:
@@ -336,15 +354,16 @@ begin
             PostMessage(ParentHandle, WM_FOCUSER_GET_POSITION, fPosition, 0);
             exit;
           end;
-       FOCUSER_SET_MAX_POSITION:
+       FOCUSER_SET_MAX_POSITION, FOCUSER_GET_MAX_POSITION:
           begin
             fMaxPosition := StrToInt(ByteArrayToStr(data, 2, size-1));
             PostMessage(ParentHandle, WM_FOCUSER_SET_MAX_POSITION, 0, 0);
             exit;
           end;
-       FOCUSER_RESET_POSITION:
+       FOCUSER_SET_MIN_POSITION, FOCUSER_GET_MIN_POSITION:
           begin
-            PostMessage(ParentHandle, WM_FOCUSER_RESET_POSITION, 0, 0);
+            fMinPosition := StrToInt(ByteArrayToStr(data, 2, size-1));
+            PostMessage(ParentHandle, WM_FOCUSER_SET_MAX_POSITION, 0, 0);
             exit;
           end;
        FOCUSER_RANGE_CHECK:

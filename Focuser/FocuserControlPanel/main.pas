@@ -54,7 +54,7 @@ type
     Memo1: TMemo;
     lePosition: TLabeledEdit;
     btnSet0: TButton;
-    Label3: TLabel;
+    lMinPos: TLabel;
     lMaxPos: TLabel;
     btnSetMax: TButton;
     cbShowDebugMsg: TCheckBox;
@@ -77,6 +77,7 @@ type
     Label1: TLabel;
     eReleaseTime: TEdit;
     cbPower: TCheckBox;
+    ConnectionTimer: TTimer;
     procedure btnConnectClick(Sender: TObject);
     procedure btnStopClick(Sender: TObject);
     procedure btnSendClick(Sender: TObject);
@@ -120,6 +121,7 @@ type
     procedure cbRCPClick(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure cbPowerClick(Sender: TObject);
+    procedure ConnectionTimerTimer(Sender: TObject);
   private
     { Private declarations }
 
@@ -135,7 +137,6 @@ type
     procedure WMFocuserRollRight(var Message: TMessage); message WM_FOCUSER_ROLL_RIGHT;
     procedure WMFocuserStepLeft(var Message: TMessage); message  WM_FOCUSER_STEP_LEFT;
     procedure WMFocuserRollLeft(var Message: TMessage); message WM_FOCUSER_ROLL_LEFT;
-    procedure WMFocuserStepped(var Message: TMessage); message WM_FOCUSER_STEPPED;
     procedure WMFocuserRolling(var Message: TMessage); message WM_FOCUSER_ROLLING;
     procedure WMFocuserPing(var Message: TMessage); message WM_DEVICE_PING;
     procedure WMFocuserHandShake(var Message: TMessage); message WM_DEVICE_HANDSHAKE;
@@ -143,9 +144,8 @@ type
     procedure WMFocuserUnknownMessage(var Message: TMessage); message WM_DEVICE_UNKNOWN_MESSAGE;
     procedure WMFocuserMicroStep(var Message: TMessage); message WM_FOCUSER_MICROSTEP;
     procedure WMFocuserPosition(var Message: TMessage); message WM_FOCUSER_GET_POSITION;
-    procedure WMFocuserResetPosition(var Message: TMessage); message WM_FOCUSER_RESET_POSITION;
     procedure WMFocuserGotoPosition(var Message: TMessage); message WM_FOCUSER_GO_TO_POSITION;
-    procedure WMFocuserMsgDebug(var Message:TMessage); message WM_DEVICE_CMD_DEBUG;
+    procedure WMFocuserMsgDebug(var Message:TMessage); message WM_DEVICE_DEBUG_MSG;
     procedure WMFocuserMaxPosition(var Message:TMessage); message WM_FOCUSER_SET_MAX_POSITION;
     procedure WMFocuserRangeCheck(var Message:TMessage); message WM_FOCUSER_RANGE_CHECK;
     procedure WMFocuserDebug(var Message:TMessage); message WM_DEVICE_DEBUG;
@@ -260,19 +260,19 @@ end;
 
 procedure TForm1.WMFocuserDebug(var Message: TMessage);
 begin
- if Focuser.IsRCP then
-   Form1.memOut.Lines.Add('Remote control is ON')
-  else
-   Form1.memOut.Lines.Add('Remote control is OFF');
-end;
-
-procedure TForm1.WMFocuserRCP(var Message: TMessage);
-begin
- if Focuser.IsDebug then
+   if Focuser.IsDebug then
    Form1.memOut.Lines.Add('Debugging ON')
   else
    Form1.memOut.Lines.Add( 'Debugging OFF');
   cbRCP.Checked := Focuser.IsRCP;
+end;
+
+procedure TForm1.WMFocuserRCP(var Message: TMessage);
+begin
+ if Focuser.IsRCP then
+   Form1.memOut.Lines.Add('Remote control is ON')
+  else
+   Form1.memOut.Lines.Add('Remote control is OFF');
 end;
 
 procedure TForm1.WMFocuserMaxSpeed(var Message: TMessage);
@@ -303,6 +303,7 @@ end;
 
 procedure TForm1.WMFocuserMicroStep(var Message: TMessage);
 begin
+    Form1.memOut.Lines.Add('Microstep mode: ' + IntToStr(Focuser.MicroStep));
     if(Focuser.MicroStep<>Form1.cbMicroStep.ItemIndex) then
       begin
         IsChangingMicroStep := true;
@@ -341,12 +342,6 @@ begin
    cbPower.Checked := true;
 end;
 
-procedure TForm1.WMFocuserStepped(var Message: TMessage);
-begin
-   Form1.memOut.Lines.Add(FOCUSER_MESSAGES[4]);
-   cbPower.Checked := true;
-end;
-
 procedure TForm1.WMFocuserRolling(var Message: TMessage);
 begin
    Form1.memOut.Lines.Add(FOCUSER_MESSAGES[9]);
@@ -368,7 +363,14 @@ end;
 procedure TForm1.WMFocuserHandShake(var Message: TMessage);
 begin
   if (Message.WParam>0) then
-    Form1.memOut.Lines.Add('Focuser connected successfully!')
+   begin
+    ConnectionTimer.Enabled := false;
+    Form1.memOut.Lines.Add('Focuser connected successfully!');
+    Focuser.MaxPosition := TFocuserItem(cbFocuser.Items.Objects[cbFocuser.ItemIndex]).MaxPos;
+    Focuser.Position := TFocuserItem(cbFocuser.Items.Objects[cbFocuser.ItemIndex]).CurrentPos;
+    Focuser.RangeCheck := TFocuserItem(cbFocuser.Items.Objects[cbFocuser.ItemIndex]).RangeCheck;
+    Focuser.IsDebug := Settings.ReadBool('General', 'SHOW_DEBUG', false);
+   end
   else
     Form1.memOut.Lines.Add('Wrong device is connected! DevType:' + IntToStr(Message.LParam))
 end;
@@ -390,8 +392,13 @@ procedure TForm1.WMFocuserMaxPosition(var Message: TMessage);
 begin
   lMaxPos.Caption := IntToStr(Focuser.MaxPosition);
   pgPosition.Max := Focuser.MaxPosition;
+
+  lMinPos.Caption := IntToStr(Focuser.MinPosition);
+  pgPosition.Min := Focuser.MinPosition;
+
   pgPosition.Position := Focuser.Position;
-  Form1.memOut.Lines.Add(FOCUSER_MESSAGES[19]);
+
+  Form1.memOut.Lines.Add('Max or Min position has been changed');
 end;
 
 procedure TForm1.WMFocuserRangeCheck(var Message:TMessage);
@@ -400,10 +407,6 @@ begin
   cbRangeCheck.Checked := Focuser.RangeCheck;
 end;
 
-procedure TForm1.WMFocuserResetPosition(var Message: TMessage);
-begin
-  Form1.memOut.Lines.Add(FOCUSER_MESSAGES[16]);
-end;
 
 procedure TForm1.WMFocuserReleaseTime(var Message:TMessage);
 begin
@@ -449,11 +452,7 @@ begin
   else
     memOut.Lines.Add('Port ' + cbPort.Items.Strings[cbPort.ItemIndex] + ' has been opened!');
 
-
-  Focuser.MaxPosition := TFocuserItem(cbFocuser.Items.Objects[cbFocuser.ItemIndex]).MaxPos;
-  Focuser.Position := TFocuserItem(cbFocuser.Items.Objects[cbFocuser.ItemIndex]).CurrentPos;
-  Focuser.RangeCheck := TFocuserItem(cbFocuser.Items.Objects[cbFocuser.ItemIndex]).RangeCheck;
-  Focuser.IsDebug := Settings.ReadBool('General', 'SHOW_DEBUG', false);
+  ConnectionTimer.Enabled := true;
 
   cbGoto.Items.Clear;
   cbGoto.Items.Add('Rightmost (0)');
@@ -535,9 +534,8 @@ end;
 
 procedure TForm1.btnSet0Click(Sender: TObject);
 begin
-   Focuser.ResetPosition;
+   Focuser.Position := 0;
 end;
-
 
 
 procedure TForm1.btnSetMaxClick(Sender: TObject);
@@ -686,6 +684,11 @@ begin
   btnStepLeft.Enabled := true;
   btnRelease.Enabled := true;
   cbMicroStep.Enabled := true;
+end;
+
+procedure TForm1.ConnectionTimerTimer(Sender: TObject);
+begin
+  Focuser.ReConnect;
 end;
 
 procedure TForm1.cbFocuserChange(Sender: TObject);

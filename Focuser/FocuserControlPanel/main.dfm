@@ -131,7 +131,7 @@ object Form1: TForm1
         Height = 13
         Caption = '30'
       end
-      object Label3: TLabel
+      object lMinPos: TLabel
         Left = 24
         Top = 88
         Width = 6
@@ -234,10 +234,12 @@ object Form1: TForm1
       end
       object pgSpeed: TProgressBar
         Left = 33
-        Top = 58
+        Top = 60
         Width = 147
         Height = 17
         Enabled = False
+        Min = 10
+        Position = 10
         TabOrder = 8
         OnMouseDown = pgSpeedMouseDown
         OnMouseMove = pgSpeedMouseMove
@@ -505,5 +507,11 @@ object Form1: TForm1
         TabOrder = 0
       end
     end
+  end
+  object ConnectionTimer: TTimer
+    Enabled = False
+    Interval = 100
+    OnTimer = ConnectionTimerTimer
+    Left = 24
   end
 end

@@ -27,8 +27,16 @@
 //#include <Stepper.h>
 #include <StepperClass.h>
 #include <EEPROM.h>
+#include <Metro.h> // Include the Metro library
 
-const char SketchVersion[] = "1.3";
+const char SketchVersion[] = "1.4";
+
+union TInt {
+  long l;
+  int i[2];
+  byte b[4];
+};
+
 
 // A4988 connection pins
 #define DirectionPin 9                      //Direction Pin - Initial State is ZERO
@@ -46,15 +54,22 @@ const char SketchVersion[] = "1.3";
 
 //  Communication protocol
 // 168 - first byte, #13#10 - end of the command
+const int FOCUSER_CMD_START = 168;
+const int FOCUSER_CMD_STOP_1 = 13;
+const int FOCUSER_CMD_STOP_2 = 10;
+const int FOCUSER_HANDSHAKE = 254;
+const int FOCUSER_GET_VERSION = 253;
+const int FOCUSER_PING = 255;
+const int FOCUSER_MSG_DEBUG = 250;
+const int FOCUSER_DEBUG = 251;
+const int FOCUSER_RC = 252;
+
 const int FOCUSER_STOP = 210;
 const int FOCUSER_STEP_RIGHT = 211;
 const int FOCUSER_ROLL_RIGHT = 212;
 const int FOCUSER_RANGE_CHECK = 215;
 const int FOCUSER_STEP_LEFT = 209;
 const int FOCUSER_ROLL_LEFT = 208;
-const int FOCUSER_PING = 255;
-const int FOCUSER_HANDSHAKE = 254;
-const int FOCUSER_STEPPED = 203;
 const int FOCUSER_ROLLING = 202;
 const int FOCUSER_GET_SPEED = 240;  
 const int FOCUSER_SET_SPEED = 241;  
@@ -62,22 +77,17 @@ const int FOCUSER_RELEASE = 220;
 const int FOCUSER_GET_RELEASE_TIME = 221; 
 const int FOCUSER_SET_RELEASE_TIME = 222; 
 const int FOCUSER_POWER_ON = 223;
-const int FOCUSER_CMD_START = 168;
 const int FOCUSER_GET_MIN_SPEED_DELAY = 239;
 const int FOCUSER_GET_MAX_SPEED_DELAY = 238;
 const int FOCUSER_SET_MICROSTEP = 231;
 const int FOCUSER_GET_MICROSTEP = 230;
 const int FOCUSER_GET_POSITION = 225;
-const int FOCUSER_GO_TO_POSITION = 226;
-const int FOCUSER_RESET_POSITION = 227;
-const int FOCUSER_SET_MAX_POSITION = 228;
 const int FOCUSER_SET_POSITION = 229;
-const int FOCUSER_CMD_STOP_1 = 13;
-const int FOCUSER_CMD_STOP_2 = 10;
-const int FOCUSER_CMD_DEBUG = 251;
-const int FOCUSER_DEBUG = 250;
-const int FOCUSER_RC = 252;
-const int FOCUSER_GET_VERSION = 253;
+const int FOCUSER_GO_TO_POSITION = 226;
+const int FOCUSER_SET_MIN_POSITION = 227;
+const int FOCUSER_SET_MAX_POSITION = 228;
+const int FOCUSER_GET_MIN_POSITION = 233;
+const int FOCUSER_GET_MAX_POSITION = 224;
 
 #define DeviceType 101
 
@@ -123,11 +133,17 @@ volatile int IsRollingToNewPos = 0;  // Rolling to the new position status
 unsigned long LastAction=0, LastPosCheck = 0, LastSpeedCheck = 0;
 
 #define RELEASE_TIME_ADDRESS  1
+#define CUR_POS_ADDRESS       4
+#define MIN_POS_ADDRESS       8
+#define MAX_POS_ADDRESS       12
 volatile int ReleaseTime = 2;   //  Idle time to release motor, in seconds
 int CheckSpeedTime = 100;  //  
 
+Metro SavePosTime = Metro(60000);  // Instantiate an instance
+long SavedPosition = 0;
+
 // Some flags
-volatile int IsDebug = 0;
+volatile int IsDebug = false;
 volatile int IsRC = true;
 
 
@@ -135,18 +151,30 @@ volatile int IsRC = true;
 
 
 void setup() {
-
+    
+    FocuserStepper.Init(MIN_SPEED_DELAY, MAX_SPEED_DELAY);   
+    FocuserStepper.SetMicroStep(DEFAULT_MS);
+    FocuserStepper.SetSpeed(500);
+    FocuserStepper.fMaxPosition = 0;    
+    FocuserStepper.fMaxPosition = 100000;    
+    FocuserStepper.fPosition = 20000;       
+    
     if ( EEPROM.read(0) != 127){     
        EEPROM.write(0, 127);       
        ReleaseTime = 300;
        EEPROM.write(RELEASE_TIME_ADDRESS, highByte(ReleaseTime));              
-       EEPROM.write(RELEASE_TIME_ADDRESS+1, lowByte(ReleaseTime));         
-    } else        
+       EEPROM.write(RELEASE_TIME_ADDRESS+1, lowByte(ReleaseTime));                
+       SavePosition(CUR_POS_ADDRESS, FocuserStepper.fPosition);
+       SavePosition(MIN_POS_ADDRESS, FocuserStepper.fMinPosition);
+       SavePosition(MAX_POS_ADDRESS, FocuserStepper.fMaxPosition);       
+    } else {
        ReleaseTime = word(EEPROM.read(RELEASE_TIME_ADDRESS),EEPROM.read(RELEASE_TIME_ADDRESS+1));
-  
-    FocuserStepper.Init(MIN_SPEED_DELAY, MAX_SPEED_DELAY);   
-    FocuserStepper.SetMicroStep(DEFAULT_MS);
-    FocuserStepper.SetSpeed(500);
+       FocuserStepper.fPosition = LoadPosition(CUR_POS_ADDRESS);
+       FocuserStepper.fMinPosition = LoadPosition(MIN_POS_ADDRESS);
+       FocuserStepper.fMaxPosition = LoadPosition(MAX_POS_ADDRESS);
+    }
+
+    SavedPosition = FocuserStepper.fPosition;
 
     pinMode(buttonPinLeft, INPUT);
     pinMode(buttonPinRight, INPUT);
@@ -155,12 +183,32 @@ void setup() {
     pinMode(motorled, OUTPUT);
 
     
-    Serial.begin(9600);
+    Serial.begin(115200);
     Serial.println("Started!");
     
     GetMotorSpeed();  
     
     LastAction = millis();
+}
+
+void SavePosition(int addr, long pos)
+{
+  TInt sPos;
+  sPos.l = pos;
+  EEPROM.write(addr, sPos.b[0]);              
+  EEPROM.write(addr+1, sPos.b[1]);              
+  EEPROM.write(addr+2, sPos.b[2]);              
+  EEPROM.write(addr+3, sPos.b[3]);                  
+}
+
+long LoadPosition(int addr)
+{
+  TInt sPos;
+  sPos.b[0] = EEPROM.read(addr);
+  sPos.b[1] = EEPROM.read(addr+1);
+  sPos.b[2] = EEPROM.read(addr+2);
+  sPos.b[3] = EEPROM.read(addr+3);  
+  return sPos.l;
 }
 
 // ----------------   Communications with PC --------------------------------
@@ -220,7 +268,7 @@ void serialEvent(){
    if (Serial.available()>0){
 
     if (IsDebug)
-      SendCmd(FOCUSER_CMD_DEBUG, "serial event, buff length: " + String(Serial.available()));
+      SendCmd(FOCUSER_MSG_DEBUG, "serial event, buff length: " + String(Serial.available()));
     int command = -1;
     int cmd_end = -1;
     
@@ -231,7 +279,7 @@ void serialEvent(){
     } while (Serial.available()>0);   
        
     if (IsDebug)
-      SendCmd(FOCUSER_CMD_DEBUG, "data recieved: " + String(BufLength));
+      SendCmd(FOCUSER_MSG_DEBUG, "data recieved: " + String(BufLength));
  
     while (BufLength>0){
     
@@ -239,7 +287,7 @@ void serialEvent(){
                            
         if (x>0){
            if (IsDebug)           
-             SendCmd(FOCUSER_CMD_DEBUG, "cmd start >0 - shift");
+             SendCmd(FOCUSER_MSG_DEBUG, "cmd start >0 - shift");
            BufLength = ShiftBuffer(SerialBuf, BufLength, x);
            continue;
         }
@@ -247,14 +295,14 @@ void serialEvent(){
         if (x==-1){
            BufLength = 0;
            if (IsDebug)
-             SendCmd(FOCUSER_CMD_DEBUG, "cmd not found");
+             SendCmd(FOCUSER_MSG_DEBUG, "cmd not found");
            return;
         }       
         
         cmd_end = FindCmdEnd(SerialBuf, BufLength);          
         if (cmd_end ==-1){
            if (IsDebug)          
-             SendCmd(FOCUSER_CMD_DEBUG, "cmd end not found");
+             SendCmd(FOCUSER_MSG_DEBUG, "cmd end not found");
            return;
         }
                              
@@ -265,7 +313,7 @@ void serialEvent(){
           param = param + char(SerialBuf[i]);
         }       
         if (IsDebug)       
-          SendCmd(FOCUSER_CMD_DEBUG, "cmd found: " + String(command));
+          SendCmd(FOCUSER_MSG_DEBUG, "cmd found: " + String(command));
         
         switch (command){
           case FOCUSER_PING:   //  ping back;
@@ -284,26 +332,35 @@ void serialEvent(){
              SendCmd(FOCUSER_STOP);             
              IsRolling = HOLD;    
              SendCmd(FOCUSER_GET_POSITION, String(FocuserStepper.fPosition));                          
+             if  (IsRollingToNewPos==HIGH){
+                IsRollingToNewPos = 0;
+                SendCmd(FOCUSER_GO_TO_POSITION, "0");
+                SendCmd(FOCUSER_ROLLING, IsRollingToNewPos);                
+             }
             break;             
             
           case FOCUSER_STEP_RIGHT: // step right
              FocuserStepper.Step(STEP_BACKWARD);  
              SendCmd(FOCUSER_STEP_RIGHT);
+             SendCmd(FOCUSER_POWER_ON);
             break;      
             
           case FOCUSER_STEP_LEFT: //  step left
              FocuserStepper.Step(STEP_FORWARD);
              SendCmd(FOCUSER_STEP_LEFT);
+             SendCmd(FOCUSER_POWER_ON);             
             break;
 
           case FOCUSER_ROLL_RIGHT: // rolling right
             IsRolling = ROLLING_RIGHT;
             SendCmd(FOCUSER_ROLL_RIGHT);            
+            SendCmd(FOCUSER_POWER_ON);                         
             break;      
                        
           case FOCUSER_ROLL_LEFT: //  rolling left     
             IsRolling = ROLLING_LEFT;      
             SendCmd(FOCUSER_ROLL_LEFT);            
+            SendCmd(FOCUSER_POWER_ON);                         
             break;      
             
           case FOCUSER_RELEASE:
@@ -311,6 +368,7 @@ void serialEvent(){
               if  (IsRollingToNewPos==HIGH){
                 IsRollingToNewPos = 0;
                 SendCmd(FOCUSER_GO_TO_POSITION, "0");
+                SendCmd(FOCUSER_ROLLING, IsRollingToNewPos);                
               }
               FocuserStepper.EnablePower(false);
               UpdatePosition();                                                  
@@ -329,38 +387,49 @@ void serialEvent(){
             break; 
            
           case FOCUSER_SET_MICROSTEP:
-                FocuserStepper.SetMicroStep(param.toInt());                
+                FocuserStepper.SetMicroStep((byte)SerialBuf[2]);                
                 SendCmd(FOCUSER_GET_MICROSTEP, FocuserStepper.fMicroStep);                
               break;
               
           case FOCUSER_GET_MICROSTEP:  
                SendCmd(FOCUSER_GET_MICROSTEP, FocuserStepper.fMicroStep);
               break; 
-              
-        case FOCUSER_RESET_POSITION:
-                SendCmd(FOCUSER_RESET_POSITION);
-                FocuserStepper.fPosition = 0;
-                SendCmd(FOCUSER_GET_POSITION, "0");
-              break;    
-              
+                            
         case FOCUSER_GET_POSITION:
               SendCmd(FOCUSER_GET_POSITION, String(FocuserStepper.fPosition));
               break;
               
         case FOCUSER_GO_TO_POSITION:{
-               int new_position = param.toInt();
+               long new_position = param.toInt();
                SendCmd(FOCUSER_GO_TO_POSITION, String(new_position));  
                FocuserStepper.fRelativePosition = new_position-FocuserStepper.fPosition; 
                if(IsDebug)
-                 SendCmd(FOCUSER_CMD_DEBUG, "Going to new relative position:" + String(FocuserStepper.fRelativePosition));          
+                 SendCmd(FOCUSER_MSG_DEBUG, "Going to new relative position:" + String(FocuserStepper.fRelativePosition));          
                FocuserStepper.fTargetPosition = new_position;
                IsRollingToNewPos = HIGH;
+               SendCmd(FOCUSER_POWER_ON);       
+               SendCmd(FOCUSER_ROLLING, IsRollingToNewPos);               
               break;
         }
         case FOCUSER_SET_MAX_POSITION:
                 FocuserStepper.fMaxPosition = param.toInt();               
-                SendCmd(FOCUSER_SET_MAX_POSITION, param ); //String(max_position));        
+                SavePosition(MAX_POS_ADDRESS, FocuserStepper.fMaxPosition);       
+                FocuserStepper.fMaxPosition = LoadPosition(MAX_POS_ADDRESS);                
+                SendCmd(FOCUSER_SET_MAX_POSITION, String(FocuserStepper.fMaxPosition) ); //String(max_position));        
               break;                      
+        case FOCUSER_SET_MIN_POSITION:
+                FocuserStepper.fMinPosition = param.toInt();               
+                SavePosition(MIN_POS_ADDRESS, FocuserStepper.fMinPosition);
+                FocuserStepper.fMinPosition = LoadPosition(MIN_POS_ADDRESS);
+                SendCmd(FOCUSER_SET_MIN_POSITION, String(FocuserStepper.fMaxPosition) ); //String(max_position));        
+              break;                            
+              
+        case FOCUSER_GET_MAX_POSITION:
+                SendCmd(FOCUSER_SET_MAX_POSITION, String(FocuserStepper.fMaxPosition) ); //String(max_position));        
+              break;                      
+        case FOCUSER_GET_MIN_POSITION:                
+                SendCmd(FOCUSER_SET_MIN_POSITION, String(FocuserStepper.fMinPosition) ); //String(max_position));        
+              break;                                          
 
         case FOCUSER_SET_POSITION:
               FocuserStepper.fPosition = param.toInt();
@@ -374,7 +443,10 @@ void serialEvent(){
         case FOCUSER_SET_SPEED:{
                long new_speed = param.toInt();
                SetSpeed(new_speed);
-            break; }   
+            break; }               
+         case FOCUSER_ROLLING:
+              SendCmd(FOCUSER_ROLLING, IsRollingToNewPos);
+            break;                      
          case FOCUSER_DEBUG:
              IsDebug = SerialBuf[2];
              SendCmd(FOCUSER_DEBUG, IsDebug);
@@ -393,6 +465,7 @@ void serialEvent(){
             SendCmd(FOCUSER_SET_RELEASE_TIME, String(ReleaseTime));            
             break;          
          case FOCUSER_POWER_ON:
+            LastAction = millis();
             FocuserStepper.EnablePower(true);      
             SendCmd(FOCUSER_POWER_ON);
             break;
@@ -413,7 +486,7 @@ void GetMotorSpeed()   // Read potentiometer
   int speed_diff = new_motorSpeed-OldMotorSpeedDU;
   if ( abs(speed_diff)>4){ 
       if (IsDebug)
-        SendCmd(FOCUSER_CMD_DEBUG, "change motor speed: " + String(OldMotorSpeedDU) + " -> " + String(new_motorSpeed));
+        SendCmd(FOCUSER_MSG_DEBUG, "change motor speed: " + String(OldMotorSpeedDU) + " -> " + String(new_motorSpeed));
       OldMotorSpeedDU = new_motorSpeed;      
       SetSpeed(map(new_motorSpeed, 0, 1023, MAX_SPEED_DELAY, MIN_SPEED_DELAY));
   }
@@ -478,11 +551,12 @@ void loop() {
         UpdatePosition();         
         IsRollingToNewPos=LOW;
         SendCmd(FOCUSER_GO_TO_POSITION, "0");
+        SendCmd(FOCUSER_ROLLING, IsRollingToNewPos);        
     }    
    LastAction = millis();              
            
     if (IsDebug)
-       SendCmd(FOCUSER_CMD_DEBUG, "distance:" + String(FocuserStepper.fRelativePosition));                                  
+       SendCmd(FOCUSER_MSG_DEBUG, "distance:" + String(FocuserStepper.fRelativePosition));                                  
   } else {
 
     if ((buttonStateLeft==HIGH)||(IsRolling==ROLLING_LEFT)){  // and roll if pressed
@@ -506,6 +580,13 @@ void loop() {
   if (time_diff>200){
       UpdatePosition();
       LastPosCheck = millis();
+  }
+
+  if ((SavePosTime.check())&&(SavedPosition!=FocuserStepper.fPosition))
+  {
+      SavedPosition = FocuserStepper.fPosition;
+      SavePosition(CUR_POS_ADDRESS, SavedPosition);
+      SendCmd(FOCUSER_MSG_DEBUG, "Saved position: " + String(SavedPosition));      
   }
 
   buttonOldStateRight = buttonStateRight; 
