@@ -219,3 +219,9 @@ bool StepperClass::GetCompensation()
 {
      return fIsDelayCompensation;
 }
+
+void StepperClass::Test()
+{
+     return;
+}
+

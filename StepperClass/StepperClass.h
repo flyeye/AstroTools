@@ -92,6 +92,7 @@ class StepperClass
     long Roll(int dir);
     void Stop();
 
+    virtual void Test();                    
 
 };
 
