@@ -1,9 +1,0 @@
-C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuser\bin\x86\Debug\ASCOM.FlyeyeFocuserV1.Focuser.dll.config
-C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuser\bin\x86\Debug\ASCOM.FlyeyeFocuserV1.Focuser.dll
-C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuser\bin\x86\Debug\ASCOM.FlyeyeFocuserV1.Focuser.pdb
-C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuser\bin\x86\Debug\ASCOM.FlyeyeFocuserV1.Focuser.tlb
-C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuser\obj\x86\Debug\ASCOM.FlyeyeFocuserV1.Properties.Resources.resources
-C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuser\obj\x86\Debug\ASCOM.FlyeyeFocuserV1.SetupDialogForm.resources
-C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuser\obj\x86\Debug\FlyeyeFocuser.csproj.GenerateResource.Cache
-C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuser\obj\x86\Debug\ASCOM.FlyeyeFocuserV1.Focuser.dll
-C:\Users\flyeye\documents\visual studio 2010\Projects\FlyeyeFocuser\FlyeyeFocuser\obj\x86\Debug\ASCOM.FlyeyeFocuserV1.Focuser.pdb

@@ -124,17 +124,12 @@ object Form1: TForm1
     Top = 74
     Width = 375
     Height = 374
-    ActivePage = tsMounter
+    ActivePage = About
     Anchors = [akLeft, akTop, akRight, akBottom]
     TabOrder = 1
     OnExit = pgMounterExit
-    ExplicitHeight = 350
     object tsMounter: TTabSheet
       Caption = 'Mounter'
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 322
       DesignSize = (
         367
         346)
@@ -274,7 +269,6 @@ object Form1: TForm1
         NumbersOnly = True
         ReadOnly = True
         TabOrder = 5
-        ExplicitTop = 208
       end
       object btnSetPos: TButton
         Left = 22
@@ -286,7 +280,6 @@ object Form1: TForm1
         Enabled = False
         TabOrder = 6
         OnClick = btnSetPosClick
-        ExplicitTop = 259
       end
       object pgNavSpeed: TProgressBar
         Left = 218
@@ -320,7 +313,6 @@ object Form1: TForm1
         Enabled = False
         TabOrder = 9
         OnClick = btnGotoClick
-        ExplicitTop = 259
       end
       object btnSave: TButton
         Left = 266
@@ -332,7 +324,6 @@ object Form1: TForm1
         Enabled = False
         TabOrder = 10
         OnClick = btnSaveClick
-        ExplicitTop = 206
       end
       object btnDelete: TButton
         Left = 266
@@ -344,7 +335,6 @@ object Form1: TForm1
         Enabled = False
         TabOrder = 11
         OnClick = btnDeleteClick
-        ExplicitTop = 232
       end
       object leNavSpeed: TLabeledEdit
         Left = 218
@@ -464,7 +454,6 @@ object Form1: TForm1
         NumbersOnly = True
         ReadOnly = True
         TabOrder = 22
-        ExplicitTop = 208
       end
       object eNewPosRA: TEdit
         Left = 136
@@ -475,7 +464,6 @@ object Form1: TForm1
         Enabled = False
         TabOrder = 23
         Text = '0'
-        ExplicitTop = 261
       end
       object eNewPosDE: TEdit
         Left = 200
@@ -486,7 +474,6 @@ object Form1: TForm1
         Enabled = False
         TabOrder = 24
         Text = '90'
-        ExplicitTop = 261
       end
       object btnSetDE: TButton
         Left = 79
@@ -498,7 +485,6 @@ object Form1: TForm1
         Enabled = False
         TabOrder = 25
         OnClick = btnSetDEClick
-        ExplicitTop = 259
       end
       object pgDailySpeedDE: TProgressBar
         Left = 218
@@ -550,7 +536,6 @@ object Form1: TForm1
         Anchors = [akLeft, akBottom]
         Enabled = False
         TabOrder = 30
-        ExplicitTop = 234
       end
       object lePosDE_EQ: TEdit
         Left = 200
@@ -560,16 +545,11 @@ object Form1: TForm1
         Anchors = [akLeft, akBottom]
         Enabled = False
         TabOrder = 31
-        ExplicitTop = 234
       end
     end
     object tsParameters: TTabSheet
       Caption = 'Parameters'
       ImageIndex = 3
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 322
       object GroupBox1: TGroupBox
         Left = 5
         Top = 3
@@ -883,10 +863,6 @@ object Form1: TForm1
     object Debug: TTabSheet
       Caption = 'Debug'
       ImageIndex = 1
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 322
       DesignSize = (
         367
         346)
@@ -920,7 +896,6 @@ object Form1: TForm1
         ReadOnly = True
         ScrollBars = ssVertical
         TabOrder = 4
-        ExplicitHeight = 257
       end
       object btnPing: TButton
         Left = 105
@@ -941,7 +916,6 @@ object Form1: TForm1
         Caption = 'Show debug message'
         TabOrder = 5
         OnClick = cbShowDebugMsgClick
-        ExplicitTop = 302
       end
       object btnClearMem: TButton
         Left = 304
@@ -952,7 +926,6 @@ object Form1: TForm1
         Caption = 'Clear'
         TabOrder = 2
         OnClick = btnClearMemClick
-        ExplicitTop = 295
       end
       object cbAutoscroll: TCheckBox
         Left = 139
@@ -962,16 +935,11 @@ object Form1: TForm1
         Anchors = [akLeft, akBottom]
         Caption = 'Autoscroll'
         TabOrder = 6
-        ExplicitTop = 302
       end
     end
     object About: TTabSheet
       Caption = 'About'
       ImageIndex = 2
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       DesignSize = (
         367
         346)
@@ -992,7 +960,7 @@ object Form1: TForm1
           ''
           ''
           'Mounter Control Panel'
-          'ver 0.4'
+          'ver 0.5'
           ''
           'Created by Alexey V. Popov'
           '9141866@gmail.com'

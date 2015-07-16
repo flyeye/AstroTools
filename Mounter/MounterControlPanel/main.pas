@@ -1165,8 +1165,6 @@ end;
 
 procedure TForm1.btnDeleteClick(Sender: TObject);
 begin
-
-
   if (cbGoto.ItemIndex>=0)and(MessageDlg('Do you really want to delete object?', mtConfirmation, [mbOK, mbCancel], 0)=mrOk) then
       cbGoto.Items.Delete(cbGoto.ItemIndex);
 

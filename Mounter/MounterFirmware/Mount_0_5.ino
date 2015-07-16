@@ -22,7 +22,7 @@
 #include <FlexiTimer2.h>
 #include <floattostring.h>
 
-const char SketchVersion[] = "0.4";
+const char SketchVersion[] = "0.5";
 
 //  Communication protocol
 // 168 - first byte, <command> - 1 byte, <params> - a few byte of command parameters, #13#10 - end of the command
@@ -38,7 +38,8 @@ const int MOUNTER_GET_NAV_SPEED = 240;
 const int MOUNTER_SET_NAV_SPEED = 241;  
 const int MOUNTER_GET_DAILY_SPEED = 242;  
 const int MOUNTER_SET_DAILY_SPEED = 243;
-const int MOUNTER_RELEASE = 220; //
+const int MOUNTER_GET_POWER = 220; //
+const int MOUNTER_SET_POWER = 223;
 const int FOCUSER_GET_RELEASE_TIME = 221; 
 const int FOCUSER_SET_RELEASE_TIME = 222; 
 const int FOCUSER_CMD_START = 168;
@@ -181,6 +182,7 @@ union TInt {
   long l;
   int i[2];
   byte b[4];
+  float f;
 };
 
 
@@ -198,10 +200,12 @@ void MotorStop()
         IsRollingRA = HOLD;
         LastPosCheck = 0;
         RAStepper.Stop();
+        SendCmd(MOUNTER_STOP, MOTOR_RA);
     } else if (IsAutoStop == MOTOR_DE){
         IsRollingDE = HOLD;      
         LastPosCheck = 0;        
-        DEStepper.Stop();        
+        DEStepper.Stop();       
+        SendCmd(MOUNTER_STOP, MOTOR_DE);
     }
     FlexiTimer2::stop(); 
     IsAutoStop = 0;
@@ -286,10 +290,22 @@ long Roll(int motor, int dir){
   
       analogWrite(motorled, HIGH);  
       
-      if (motor== MOTOR_RA) 
+      
+      
+      if (motor== MOTOR_RA){ 
+        if (!RAStepper.fEnabled){
+           RAStepper.EnablePower(true);                                    
+           SendCmd(MOUNTER_SET_POWER, (byte) MOTOR_RA, (byte) RAStepper.fEnabled);
+        }        
         res = RAStepper.Roll(dir);                   
-      else if (motor==MOTOR_DE)
-        res = DEStepper.Roll(dir);
+      }
+      else if (motor==MOTOR_DE){
+        if (!DEStepper.fEnabled){
+           DEStepper.EnablePower(true);                                  
+           SendCmd(MOUNTER_SET_POWER, (byte) MOTOR_DE, (byte) DEStepper.fEnabled);
+        }        
+        res = DEStepper.Roll(dir);        
+      }
     
      long t = millis();
      if (  t - LastPosCheck > PositionCheckTime){
@@ -480,6 +496,10 @@ void serialEvent(){
             break;             
             
           case MOUNTER_STOP:  // stop
+             if  (IsRollingToNewPos==HIGH){
+                IsRollingToNewPos = 0;
+                SendCmd(FOCUSER_GO_TO_POSITION, "0");
+             }
              if (SerialBuf[2]==MOTOR_RA){        
                  SendCmd(MOUNTER_STOP, MOTOR_RA);
                  IsRollingRA = false;         
@@ -492,18 +512,68 @@ void serialEvent(){
              UpdatePosition();                      
           break;             
             
+         case MOUNTER_GET_POWER:
+              if (SerialBuf[2]==MOTOR_RA){            
+                  SendCmd(MOUNTER_GET_POWER, (byte) MOTOR_RA, (byte) RAStepper.fEnabled);
+               } else if (SerialBuf[2]==MOTOR_DE){                               
+                  SendCmd(MOUNTER_GET_POWER, (byte) MOTOR_DE, (byte) DEStepper.fEnabled);
+               }    
+              break;           
+               
+
+         case MOUNTER_SET_POWER:
+            if (SerialBuf[3] == 1){
+               if (SerialBuf[2]==MOTOR_RA){            
+                  RAStepper.EnablePower(true);                    
+                  SendCmd(MOUNTER_SET_POWER, (byte) MOTOR_RA, (byte) RAStepper.fEnabled);
+                  LastActionRA = millis();                  
+               } else if (SerialBuf[2]==MOTOR_DE){
+                  DEStepper.EnablePower(true);                                  
+                  SendCmd(MOUNTER_SET_POWER, (byte) MOTOR_DE, (byte) DEStepper.fEnabled);
+                  LastActionDE = millis();                  
+               }               
+            } else {
+                if  (IsRollingToNewPos==HIGH){
+                  IsRollingToNewPos = 0;
+                  SendCmd(FOCUSER_GO_TO_POSITION, "0");
+                }
+                if (SerialBuf[2]==MOTOR_RA){        
+                  RAStepper.Stop();
+                  IsRollingRA = false;
+                  IsTurningRA= HOLD;                            
+                  RAStepper.EnablePower(false);
+                  analogWrite(turnled, LOW);     
+                  SendCmd(MOUNTER_STOP, MOTOR_RA);  
+                  SendCmd(MOUNTER_GET_DROTATION, (byte) MOTOR_RA, (byte) 0);                                                        
+                  SendCmd(MOUNTER_SET_POWER, (byte) MOTOR_RA, (byte) RAStepper.fEnabled);
+                } else if (SerialBuf[2]==MOTOR_DE){
+                  DEStepper.Stop();      
+                  IsRollingDE = false;        
+                  IsTurningDE= HOLD;                                                        
+                  DEStepper.EnablePower(false);
+                  SendCmd(MOUNTER_STOP, MOTOR_DE);                    
+                  SendCmd(MOUNTER_SET_POWER, (byte) MOTOR_DE, (byte) DEStepper.fEnabled);
+                  SendCmd(MOUNTER_GET_DROTATION, (byte) MOTOR_DE, (byte) 0);                                                                  
+                }
+                UpdatePosition();                                                  
+                break;               
+            }
+            
+            
           case MOUNTER_STEP: // step right       
              if (SerialBuf[2]==MOTOR_RA){        
                  char buf[2] = {MOTOR_RA, SerialBuf[3]};
                  RAStepper.SetMicroStep(nav_micro_step);                             
                  RAStepper.Step(buf[1]);               
                  SendCmd(MOUNTER_STEP, buf, 2);
+                 SendCmd(MOUNTER_SET_POWER, (byte) MOTOR_RA, (byte) RAStepper.fEnabled);
                  LastActionRA = millis();    
              } else if (SerialBuf[2]==MOTOR_DE){
                  char buf[2] = {MOTOR_DE, SerialBuf[3]};               
                  DEStepper.SetMicroStep(nav_micro_step);                             
                  DEStepper.Step(buf[1]);         
-                 SendCmd(MOUNTER_STEP, buf, 2);                    
+                 SendCmd(MOUNTER_STEP, buf, 2);           
+                 SendCmd(MOUNTER_SET_POWER, (byte) MOTOR_DE, (byte) DEStepper.fEnabled);
                  LastActionDE = millis();    
              }
              UpdatePosition();                                   
@@ -522,6 +592,7 @@ void serialEvent(){
                  if (IsRollingRA == buf[1]){
                    IsRollingRA = HOLD;      
                    RAStepper.Stop();
+                   SendCmd(MOUNTER_STOP, MOTOR_RA);
                  }                   
                  else 
                    IsRollingRA = buf[1];                                                                      
@@ -539,6 +610,7 @@ void serialEvent(){
                  if ((IsRollingRA)&&(IsRollingDE)){
                     IsRollingDE = HOLD;
                     DEStepper.Stop();                    
+                    SendCmd(MOUNTER_STOP, MOTOR_DE);
                  }
              } else if (SerialBuf[2]==MOTOR_DE){
                  char buf[2] = {MOTOR_DE, SerialBuf[3]};
@@ -549,6 +621,7 @@ void serialEvent(){
                  if (IsRollingDE == buf[1]){
                    IsRollingDE = HOLD;      
                    DEStepper.Stop();
+                   SendCmd(MOUNTER_STOP, MOTOR_DE);
                  }                   
                  else 
                    IsRollingDE = buf[1];                                                   
@@ -565,33 +638,12 @@ void serialEvent(){
                  if ((IsRollingRA)&&(IsRollingDE)){
                     IsRollingRA = HOLD;             
                     RAStepper.Stop();
+                    SendCmd(MOUNTER_STOP, MOTOR_RA);
                  }    
              }
              UpdatePosition();                             
              
-          } break;                            
-            
-          case MOUNTER_RELEASE:
-            if  (IsRollingToNewPos==HIGH){
-                IsRollingToNewPos = 0;
-                SendCmd(FOCUSER_GO_TO_POSITION, "0");
-              }
-            if (SerialBuf[2]==MOTOR_RA){        
-              SendCmd(MOUNTER_RELEASE, MOTOR_RA);
-              RAStepper.Stop();
-              RAStepper.EnablePower(false);
-              analogWrite(turnled, LOW);       
-              IsTurningRA= HOLD;              
-              SendCmd(MOUNTER_GET_DROTATION, (byte) MOTOR_RA, (byte) 0);                                      
-            } else if (SerialBuf[2]==MOTOR_DE){
-              DEStepper.Stop();              
-              IsTurningDE= HOLD;                                                        
-              DEStepper.EnablePower(false);
-              SendCmd(MOUNTER_RELEASE, MOTOR_DE);   
-              SendCmd(MOUNTER_GET_DROTATION, (byte) MOTOR_DE, (byte) 0);                                                                  
-            }
-            UpdatePosition();                                                  
-            break;  
+          } break;                                                  
             
           case MOUNTER_GET_NAV_SPEED: SendCmd(MOUNTER_GET_NAV_SPEED, String(nav_speed));  break;
           
@@ -785,7 +837,7 @@ void serialEvent(){
             time_t t = RTC.get();
             tmElements_t tm;
             breakTime( t, tm);            
-            SendCmd(FBC_RTC_GET, String(1970 + tm.Year) + '/' + String(tm.Month) + '/' + String(tm.Day) + ' ' + String(tm.Hour) + ':' + String(tm.Minute) + ':' + String(tm.Second) + ';');
+            SendCmd(FBC_RTC_GET, String(1970 + tm.Year) + '/' + String(tm.Month) + '/' + String(tm.Day) + ' ' + String(tm.Hour) + ':' + String(tm.Minute) + ':' + String(tm.Second));
        } break;
        case FBC_RTC_SET:{                  
             tmElements_t tm;            
@@ -803,13 +855,20 @@ void serialEvent(){
             time_t t = makeTime(tm);
             
             String s1 = String(1970 + tm.Year) + '/' + String(tm.Month) + '/' + String(tm.Day);
-            String s2 = String(tm.Hour) + ':' + String(tm.Minute) + ':' + String(tm.Second);
+            String s2 = String(tm.Hour) + ':' + String(tm.Minute) + ':' + String(tm.Second) + ';';
             RTC.set(t);
-            SendCmd(FBC_RTC_SET, s1 + ' ' + s2 + ';');            
+            SendCmd(FBC_RTC_SET, s1 + ' ' + s2);            
        }break;       
        case FBC_RTC_TEMP:{
             char buffer[64];
             floatToString(buffer, RTC.temperature() / 4., 1, ',');              
+//            lcd.clear();
+//            lcd.setCursor(0,0);
+//            TInt d;                   
+//            d.f = RTC.temperature();
+//            lcd.print(buffer);                       
+//            SendCmd(FBC_RTC_TEMP, 0, d.l);                        
+//              SendCmd(FBC_RTC_TEMP, (char*) &(d.l), 4);                        
             SendCmd(FBC_RTC_TEMP, String(buffer));            
        } break;       
        }       
@@ -890,6 +949,15 @@ void setup() {
     lcd.print(String(1970 + tm.Year) + '/' + String(tm.Month) + '/' + String(tm.Day));
     lcd.setCursor(0,1); 
     lcd.print(String(tm.Hour) + ':' + String(tm.Minute) + ':' + String(tm.Second) + ';');                    
+    delay(1000);
+    
+    lcd.clear();    
+    
+    lcd.clear();
+    lcd.setCursor(0,0);
+    char buffer[64];
+    floatToString(buffer, RTC.temperature() / 4., 1, ',');              
+    lcd.print(buffer);    
     delay(1000);
     
     lcd.clear();    
@@ -1050,7 +1118,7 @@ void loop() {
       int time_diff = (millis() - LastActionRA)/1000;
       if ((time_diff>ReleaseTime)||(btnPinState==HIGH)){
         RAStepper.EnablePower(false);      
-        SendCmd(MOUNTER_RELEASE, MOTOR_RA);      
+        SendCmd(MOUNTER_SET_POWER, (byte) MOTOR_RA, (byte) RAStepper.fEnabled);
       }
   }
   
@@ -1086,7 +1154,7 @@ void loop() {
       int time_diff = (millis() - LastActionDE)/1000;
       if ((time_diff>ReleaseTime)||(btnPinState==HIGH)){
         DEStepper.EnablePower(false);
-        SendCmd(MOUNTER_RELEASE, MOTOR_DE);      
+        SendCmd(MOUNTER_SET_POWER, (byte) MOTOR_DE, (byte) DEStepper.fEnabled);
       }
     } 
  }

@@ -683,6 +683,7 @@ begin
             if data[2]=MOTOR_RA then
               begin
                fPosRA := data_b.int;  //StrToInt(s);
+
                fPosRA_EQ := -fPosRA/fGearRatioRA;
                if (fIsTime) then
                  begin

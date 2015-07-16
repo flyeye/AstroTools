@@ -18,6 +18,7 @@ type TWord = record
           0: (wrd1, wrd2:word);
           1: (int:integer);
           2: (b1, b2, b3, b4:byte);
+          3: (f:single);
        end;
 
 //  FBC Protocol
@@ -139,6 +140,16 @@ begin
     result := result + char(data[i]);
 end;
 
+
+function  ByteArrayToFloat(data:TCommandData; index:integer; size:integer):single;
+var i:TInteger;
+begin
+   i.b1 := data[index];
+   i.b2 := data[index+1];
+   i.b3 := data[index+2];
+   i.b4 := data[index+3];
+   result := i.f;
+end;
 
 // -------------    TFBasicCom   -------------------
 
@@ -505,6 +516,7 @@ begin
          end;
        FBC_RTC_TEMP:
          begin
+//           fRTCTemp := ByteArrayToFloat(data, 2, size-1);
            fRTCTemp := StrToFloat(ByteArrayToStr(data, 2, size-1));
            PostMessage(ParentHandle, WM_RTC_TEMP, 0, 0);
          end;
