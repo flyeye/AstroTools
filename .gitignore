@@ -1,0 +1,4 @@
+*.cache
+*.pdb
+**\bin
+**\obj
